@@ -1,0 +1,112 @@
+# S5: Error/retry — the D9 discriminator
+#
+# Tests whether failed tool calls count against the iteration budget.
+# The mock LLM requests a tool call, the tool fails (simulated error),
+# and then the LLM retries. Do retries consume budget?
+#
+# Framework behavior:
+#   AutoGen: Yes, retry is a new message = new turn consumed
+#   LangChain: Configurable (handle_parsing_errors can absorb or not)
+#   CrewAI: No, retries are "free" (don't count against max_iter)
+#   LangGraph: Yes, each retry is a new graph step
+#   SK: No, failed auto-invoke doesn't decrement attempts counter
+
+name: S5-error-retry
+description: >
+  Agent calls a tool that fails on first attempt, then retries successfully.
+  Budget is set to max_iterations=2. If retries count against budget,
+  the agent only gets the retry (1 useful call). If retries are free,
+  it gets the full budget for successful calls.
+
+budget:
+  max_iterations: 2
+  max_tokens: 10000
+
+tools:
+  - name: get_weather
+    description: Get current weather for a city
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+      required:
+        - city
+
+task: "What is the weather in Tokyo?"
+
+# Script simulates: call -> error response -> retry call -> success -> answer
+script:
+  # Turn 1: LLM decides to call tool
+  - content: null
+    prompt_tokens: 60
+    completion_tokens: 20
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_e01
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Toky"}'
+
+  # Turn 2: After tool error is reported back, LLM retries with corrected input
+  - content: null
+    prompt_tokens: 120
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_e02
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Tokyo"}'
+
+  # Turn 3: LLM produces final answer
+  - content: "The weather in Tokyo is 22°C and sunny."
+    prompt_tokens: 180
+    completion_tokens: 15
+    finish_reason: stop
+
+  # Turn 4: Extra if budget allows
+  - content: "Would you like me to check another city?"
+    prompt_tokens: 210
+    completion_tokens: 12
+    finish_reason: stop
+
+tool_behavior:
+  get_weather:
+    - error: "City 'Toky' not found. Did you mean 'Tokyo'?"
+    - success: '{"city": "Tokyo", "temp_c": 22, "condition": "sunny"}'
+
+expected_total_tokens: 442
+
+dimensions:
+  D9_error_retry_counting:
+    question: "Does a failed tool call + retry consume 1 or 2 budget units?"
+    possible_values:
+      - "retry_counts_as_iteration"
+      - "retry_is_free"
+      - "configurable"
+      - "error_terminates_immediately"
+    note: >
+      With budget=2:
+        If retry counts: agent uses both iterations on the failed+retry sequence, no final answer.
+        If retry free: agent has 2 full "good" iterations available.
+
+      This matters for OTel because gen_ai.agent.iteration_budget.consumed will differ:
+        Framework A: consumed=2 (counted the retry)
+        Framework B: consumed=1 (only counted the success)
+      Same work done, different telemetry. Observers can't compare across frameworks.
+
+  D10_error_propagation:
+    question: "How is the tool error communicated back to the LLM?"
+    possible_values:
+      - "as_tool_result_with_error_content"
+      - "as_system_message"
+      - "framework_handles_silently"
+      - "raises_to_caller"
+    note: >
+      How the error reaches the LLM affects prompt token count for subsequent turns.
+      If the framework injects a system message about the error, that adds tokens
+      the mock ledger won't capture (since it only records what it serves, not what
+      the framework prepends).

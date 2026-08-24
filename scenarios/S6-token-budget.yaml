@@ -1,0 +1,132 @@
+# S6: Token budget exhaustion — the D11 discriminator
+#
+# Tests how frameworks enforce CUMULATIVE token budgets (not per-call max_tokens).
+# Most frameworks either don't have this or implement it very differently.
+#
+# The mock LLM serves responses with increasing prompt tokens (context grows).
+# Total tokens hit 500 after turn 3 and 800 after turn 5.
+# Framework budget is set to max_tokens=600 cumulative.
+
+name: S6-token-budget
+description: >
+  Agent loops with growing context. Token budget is 600 cumulative.
+  The mock LLM reports increasing prompt_tokens (simulating context growth).
+  After turn 3, cumulative total exceeds 600. The question is which
+  frameworks enforce this and how they count.
+
+budget:
+  max_iterations: 10
+  max_tokens: 600
+
+tools:
+  - name: get_weather
+    description: Get current weather for a city
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+      required:
+        - city
+
+task: "Check weather in 5 cities: Tokyo, London, New York, Paris, Sydney."
+
+script:
+  # Turn 1: tool call for Tokyo (cumulative: 85 tokens)
+  - content: null
+    prompt_tokens: 60
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t01
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Tokyo"}'
+
+  # Turn 2: tool call for London (cumulative: 235 tokens)
+  - content: null
+    prompt_tokens: 120
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t02
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "London"}'
+
+  # Turn 3: tool call for New York (cumulative: 420 tokens)
+  - content: null
+    prompt_tokens: 160
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t03
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "New York"}'
+
+  # Turn 4: tool call for Paris (cumulative: 640 tokens — EXCEEDS 600 budget)
+  - content: null
+    prompt_tokens: 190
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t04
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Paris"}'
+
+  # Turn 5: tool call for Sydney (cumulative: 890 tokens)
+  - content: null
+    prompt_tokens: 220
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t05
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Sydney"}'
+
+  # Turn 6: final answer
+  - content: "Weather summary: Tokyo 22C sunny, London 15C cloudy, New York 28C partly cloudy, Paris 18C rainy, Sydney 25C clear."
+    prompt_tokens: 260
+    completion_tokens: 40
+    finish_reason: stop
+
+expected_total_tokens: 1210
+
+dimensions:
+  D11_token_budget_enforcement:
+    question: "Does the framework enforce cumulative token budget?"
+    possible_values:
+      - "enforced_pre_call"
+      - "enforced_post_call"
+      - "not_enforced_no_feature"
+      - "enforced_per_call_only"
+    note: >
+      Frameworks without cumulative token budget: SK, Swarm, Anthropic (all per-call only)
+      Frameworks with cumulative: AutoGen (token_budget callback), ADK (configurable)
+      Frameworks with partial: LangChain (through callbacks, not built-in)
+
+      For OTel: gen_ai.agent.token_budget.limit and .consumed are only meaningful
+      if the framework actually tracks cumulative tokens. If it doesn't, these
+      attributes must be populated by the instrumentation library, not the framework.
+
+  D12_token_counting_method:
+    question: "Which tokens count: prompt only, completion only, or total?"
+    possible_values:
+      - "total_tokens"
+      - "completion_tokens_only"
+      - "prompt_tokens_only"
+      - "framework_specific_calculation"
+    note: >
+      If framework counts total_tokens: budget=600 exhausted at turn 4 (640 cumulative)
+      If completion_tokens_only: 85+30+25+30 = 170 at turn 4, far under 600
+      If prompt_tokens: 60+120+160+190 = 530 at turn 4, still under 600
+
+      This single design choice changes when the agent stops by 2-3 turns.

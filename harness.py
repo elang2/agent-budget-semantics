@@ -37,6 +37,9 @@ RUNNERS = {
     "adk": "runners.runner_adk",
     "semantic_kernel": "runners.runner_semantic_kernel",
     "anthropic": "runners.runner_anthropic",
+    "swarm": "runners.runner_swarm",
+    "llamaindex": "runners.runner_llamaindex",
+    "agno": "runners.runner_agno",
 }
 
 MOCK_PORT = 9111
