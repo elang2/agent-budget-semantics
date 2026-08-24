@@ -1,0 +1,26 @@
+{
+  "title": "agent-budget-semantics: Differential Testing of Budget Enforcement Across AI Agent Frameworks",
+  "description": "Empirical analysis revealing 24 dimensions of divergence in how 11 AI agent frameworks enforce iteration and token budgets. Demonstrates that gen_ai.agent.iteration_budget.consumed produces 4 different values for identical executions, with $97K/year cost impact at enterprise scale.",
+  "creators": [
+    {
+      "name": "Srinivasan, Elankumaran",
+      "orcid": "0009-0001-5695-0092"
+    }
+  ],
+  "keywords": [
+    "AI agents",
+    "budget enforcement",
+    "differential testing",
+    "OpenTelemetry",
+    "semantic conventions",
+    "LLM",
+    "conformance testing",
+    "AutoGen",
+    "LangChain",
+    "CrewAI",
+    "observability"
+  ],
+  "license": "Apache-2.0",
+  "upload_type": "software",
+  "access_right": "open"
+}

@@ -1,0 +1,49 @@
+name: Weekly Stats
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  collect-stats:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect adoption metrics
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date '+%Y-%m-%d')
+
+          # PyPI
+          PYPI_MONTHLY=$(curl -s "https://pypistats.org/api/packages/agent-budget-semantics/recent" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('last_month',0))" 2>/dev/null || echo 0)
+          PYPI_WEEKLY=$(curl -s "https://pypistats.org/api/packages/agent-budget-semantics/recent" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('last_week',0))" 2>/dev/null || echo 0)
+
+          # GitHub
+          STARS=$(gh api repos/elang2/agent-budget-semantics --jq '.stargazers_count')
+          FORKS=$(gh api repos/elang2/agent-budget-semantics --jq '.forks_count')
+          CLONES=$(gh api repos/elang2/agent-budget-semantics/traffic/clones --jq '.count' 2>/dev/null || echo 0)
+          VIEWS=$(gh api repos/elang2/agent-budget-semantics/traffic/views --jq '.count' 2>/dev/null || echo 0)
+          UNIQUES=$(gh api repos/elang2/agent-budget-semantics/traffic/views --jq '.uniques' 2>/dev/null || echo 0)
+
+          # Append to metrics log
+          mkdir -p metrics
+          echo "$DATE,$PYPI_MONTHLY,$PYPI_WEEKLY,$STARS,$FORKS,$CLONES,$VIEWS,$UNIQUES" >> metrics/weekly.csv
+
+          # Create/update header if first entry
+          if [ ! -f metrics/weekly.csv ] || [ $(wc -l < metrics/weekly.csv) -eq 1 ]; then
+            sed -i '1i date,pypi_monthly,pypi_weekly,stars,forks,clones_14d,views_14d,unique_visitors_14d' metrics/weekly.csv
+          fi
+
+      - name: Commit metrics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add metrics/
+          git diff --staged --quiet || git commit -m "metrics: weekly stats $(date '+%Y-%m-%d')"
+          git push
