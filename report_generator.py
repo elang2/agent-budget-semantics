@@ -245,12 +245,14 @@ def _load_harness_results(scenario: str) -> dict:
             elif isinstance(data, dict) and data.get("scenario") == scenario:
                 if "frameworks" in data and isinstance(data["frameworks"], dict):
                     for fw, fw_data in data["frameworks"].items():
-                        if fw_data.get("consumed") is not None:
+                        consumed = fw_data.get("consumed_at_ground_truth") or fw_data.get("consumed")
+                        if consumed is not None:
                             executed[fw] = {
                                 "framework": fw,
                                 "scenario": scenario,
-                                "consumed": fw_data["consumed"],
+                                "consumed_at_ground_truth": consumed,
                                 "unit_observed": fw_data.get("unit_observed"),
+                                "enforced": fw_data.get("enforced", True),
                                 "framework_version": fw_data.get("version"),
                                 "provenance": data.get("provenance", "executed"),
                             }
@@ -275,7 +277,7 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
     for fw in FRAMEWORK_BUDGET_SEMANTICS:
         if fw in harness_results:
             hr = harness_results[fw]
-            consumed = hr.get("consumed")
+            consumed = hr.get("consumed_at_ground_truth") or hr.get("consumed")
             if consumed is None:
                 consumed = _calculate_consumed(fw, llm_calls, tool_calls)
                 provenance = "modeled"
