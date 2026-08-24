@@ -243,7 +243,19 @@ def _load_harness_results(scenario: str) -> dict:
                         fw = entry["framework"]
                         executed[fw] = entry
             elif isinstance(data, dict) and data.get("scenario") == scenario:
-                executed[data["framework"]] = data
+                if "frameworks" in data and isinstance(data["frameworks"], dict):
+                    for fw, fw_data in data["frameworks"].items():
+                        if fw_data.get("consumed") is not None:
+                            executed[fw] = {
+                                "framework": fw,
+                                "scenario": scenario,
+                                "consumed": fw_data["consumed"],
+                                "unit_observed": fw_data.get("unit_observed"),
+                                "framework_version": fw_data.get("version"),
+                                "provenance": data.get("provenance", "executed"),
+                            }
+                elif "framework" in data:
+                    executed[data["framework"]] = data
         except (json.JSONDecodeError, KeyError):
             continue
     return executed
@@ -263,12 +275,12 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
     for fw in FRAMEWORK_BUDGET_SEMANTICS:
         if fw in harness_results:
             hr = harness_results[fw]
-            gt = hr.get("ground_truth", {})
-            consumed = gt.get("llm_calls", 0) + gt.get("tool_calls", 0)
-            if "framework_reports" in hr:
-                fr = hr["framework_reports"]
-                consumed = fr.get("llm_calls", consumed)
-            provenance = "executed"
+            consumed = hr.get("consumed")
+            if consumed is None:
+                consumed = _calculate_consumed(fw, llm_calls, tool_calls)
+                provenance = "modeled"
+            else:
+                provenance = hr.get("provenance", "executed")
             version = hr.get("framework_version", FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown"))
         else:
             consumed = _calculate_consumed(fw, llm_calls, tool_calls)
