@@ -1,5 +1,11 @@
 # agent-budget-semantics
 
+[![PyPI version](https://img.shields.io/pypi/v/agent-budget-semantics)](https://pypi.org/project/agent-budget-semantics/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/agent-budget-semantics)](https://pypistats.org/packages/agent-budget-semantics)
+[![CI](https://github.com/elang2/agent-budget-semantics/actions/workflows/ci.yml/badge.svg)](https://github.com/elang2/agent-budget-semantics/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/elang2/agent-budget-semantics)](https://github.com/elang2/agent-budget-semantics/stargazers)
+[![License](https://img.shields.io/pypi/l/agent-budget-semantics)](https://github.com/elang2/agent-budget-semantics/blob/main/LICENSE)
+
 Differential testing of budget enforcement semantics across 11 AI agent frameworks.
 
 ## The Problem
@@ -119,6 +125,57 @@ swarm            8       10         333%     root → 4 llm → 3 tool
 | S12: Dynamic budget | Mid-run modification | D23-D24 |
 
 See [DIMENSIONS.md](DIMENSIONS.md) for the full taxonomy with per-framework behavior.
+
+## Full Conformance Results
+
+### S2: Budget Exhaustion (budget=3, 4 LLM calls, 3 tool calls, 478 tokens)
+
+| Framework | budget param | consumed | utilization | exceeded? | counting method |
+|-----------|-------------|----------|-------------|-----------|-----------------|
+| AutoGen | `max_turns` | **7** | 233% | YES | messages (LLM + tool results) |
+| OpenAI Agents | `max_turns` | **4** | 133% | YES | LLM invocations |
+| LangChain | `max_iterations` | 3 | 100% | no | tool-use cycles |
+| LangGraph | `recursion_limit` | **7** | 233% | YES | graph node executions |
+| CrewAI | `max_iter` | 3 | 100% | no | tool-use cycles |
+| Google ADK | `max_iterations` | 3 | 100% | no | full agent loops |
+| Semantic Kernel | `max_auto_invoke` | 3 | 100% | no | auto-invoke rounds |
+| Anthropic | *(client-side)* | **4** | 133% | YES | client-defined |
+| Swarm | `max_turns` | **10** | 333% | YES | all messages in history |
+| LlamaIndex | `max_iterations` | 3 | 100% | no | ReAct steps |
+| Agno | `max_iterations` | 3 | 100% | no | tool-use cycles |
+
+**Unique `consumed` values: `[3, 4, 7, 10]`** — 4 different answers for identical execution.
+
+### S4: Parallel Tools (budget=2, 3 parallel tool calls)
+
+| Framework | consumed | Why |
+|-----------|----------|-----|
+| OpenAI Agents | 2 | Batch of 3 tools = 1 turn |
+| LangChain | 3 | Each tool = 1 iteration |
+| AutoGen | 5 | Each tool result = separate message |
+| Swarm | 8 | Each tool = request + result messages |
+
+### S5: Error/Retry (budget=2, 1 failed + 1 retry)
+
+| Framework | Retry counts? | consumed |
+|-----------|--------------|----------|
+| AutoGen | Yes | 2 (no budget left for useful work) |
+| LangGraph | Yes | 2 |
+| CrewAI | No | 1 (full budget for useful work) |
+| Semantic Kernel | No | 1 |
+
+### OTel Telemetry Impact
+
+Same execution, different dashboard:
+
+| Framework | Spans emitted | Structure | Alert at consumed>3? |
+|-----------|--------------|-----------|----------------------|
+| LangChain | 6 | root → 4 llm → 1 batch | NO (consumed=3) |
+| OpenAI Agents | 8 | root → 4 llm → 3 tool | YES (consumed=4) |
+| AutoGen | 8 | root → 4 llm → 3 tool | YES (consumed=7) |
+| Swarm | 8 | root → 4 llm → 3 tool | YES (consumed=10) |
+
+An alert threshold of `consumed > 3` fires for 7/11 frameworks but not 4/11. Same work. Same tokens. Your monitoring is framework-dependent.
 
 ## Use in CI
 
