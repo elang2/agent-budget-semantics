@@ -1,0 +1,95 @@
+# S2: Tool-turn scenario — the D1 discriminator
+#
+# Tests whether a framework counts tool-call turns toward the iteration budget.
+# The mock LLM produces: plan -> tool_call -> tool_result_incorporation -> done.
+# This is 4 LLM requests but semantically 2 "iterations" (plan + execute).
+# Frameworks disagree on what counts as an "iteration" here.
+
+name: S2-tool-turn
+description: >
+  Agent is given a task requiring one tool call. The LLM produces a plan,
+  requests a tool call, receives the tool result, then produces a final answer.
+  Budget is set to max_iterations=2. The question is whether the framework
+  considers tool-call handling as a separate iteration.
+
+budget:
+  max_iterations: 2
+  max_tokens: 10000
+
+tools:
+  - name: get_weather
+    description: Get current weather for a city
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+      required:
+        - city
+
+task: "What is the weather in Tokyo?"
+
+# Mock LLM script: 4 completions that form a plan-tool-incorporate-answer loop
+script:
+  - content: "I'll check the weather in Tokyo for you."
+    prompt_tokens: 50
+    completion_tokens: 15
+    finish_reason: stop
+
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_001
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Tokyo"}'
+
+  - content: "Based on the weather data, Tokyo is currently 22°C and sunny."
+    prompt_tokens: 120
+    completion_tokens: 20
+    finish_reason: stop
+
+  - content: "The weather in Tokyo is 22°C and sunny. Is there anything else?"
+    prompt_tokens: 150
+    completion_tokens: 18
+    finish_reason: stop
+
+# Ground truth from ledger (what the mock actually serves)
+expected_total_tokens: 478
+
+# Discriminator dimensions
+dimensions:
+  D1_iteration_unit:
+    question: "Does the tool-call round count as a separate iteration?"
+    possible_values:
+      - "yes_tool_turn_is_iteration"
+      - "no_only_user_facing_counts"
+      - "configurable"
+    note: >
+      If tool-call counts as iteration, budget=2 means the agent stops after
+      the tool result incorporation (3rd completion). If not, it gets all 4.
+
+  D2_token_accounting:
+    question: "Are prompt_tokens from the tool-result turn counted toward token budget?"
+    possible_values:
+      - "all_tokens_counted"
+      - "only_completion_tokens"
+      - "only_user_visible_tokens"
+
+  D3_enforcement_point:
+    question: "Is budget checked before or after the LLM call?"
+    possible_values:
+      - "pre_call"
+      - "post_call"
+      - "both"
+
+  D4_exhaustion_behavior:
+    question: "What happens when budget is exhausted mid-task?"
+    possible_values:
+      - "hard_stop_no_output"
+      - "return_partial"
+      - "one_more_completion_for_summary"
+      - "raise_exception"

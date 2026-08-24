@@ -1,0 +1,50 @@
+[project]
+name = "agent-budget-semantics"
+version = "0.1.0"
+description = "Differential testing of budget enforcement semantics across AI agent frameworks"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    {name = "Elankumaran Srinivasan"}
+]
+keywords = [
+    "agent",
+    "budget",
+    "differential-testing",
+    "conformance",
+    "opentelemetry",
+    "autogen",
+    "langchain",
+    "crewai",
+    "google-adk"
+]
+
+dependencies = [
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+autogen = ["autogen-agentchat>=0.4", "autogen-ext>=0.4"]
+openai-agents = ["openai-agents>=0.1"]
+langchain = ["langchain>=0.3", "langchain-openai>=0.3"]
+langgraph = ["langgraph>=0.3"]
+crewai = ["crewai>=0.100"]
+adk = ["google-adk>=1.0"]
+all = [
+    "agent-budget-semantics[autogen]",
+    "agent-budget-semantics[openai-agents]",
+    "agent-budget-semantics[langchain]",
+    "agent-budget-semantics[langgraph]",
+    "agent-budget-semantics[crewai]",
+    "agent-budget-semantics[adk]",
+]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,98 @@
+scenario: S2 - Budget Exhaustion
+description: |
+  Expected behavior when each framework hits its budget limit against
+  a 10-turn tool-calling loop.
+
+  Key question: what does "3 iterations" mean?
+  - AutoGen max_turns=3: counts messages (both LLM and tool results)
+  - OpenAI Agents max_turns=3: counts full LLM invocations
+  - LangChain max_iterations=3: counts tool-calling iterations only (final answer is free)
+  - LangGraph recursion_limit=6: counts node executions (2 per iteration: LLM + tool)
+  - CrewAI max_iter=3: counts tool-use loops
+  - ADK max_iterations=3: counts full agent loop iterations
+
+expectations:
+  autogen:
+    budget_param: max_turns
+    budget_value: 3
+    expected_llm_calls: "1-2"
+    rationale: "max_turns counts all messages; with tool results included, budget fires early"
+
+  openai_agents:
+    budget_param: max_turns
+    budget_value: 3
+    expected_llm_calls: 3
+    rationale: "Each turn = one LLM invocation regardless of tool calls"
+
+  langchain:
+    budget_param: max_iterations
+    budget_value: 3
+    expected_llm_calls: "3-4"
+    rationale: "3 iterations of tool-calling + potential final answer call"
+
+  langgraph:
+    budget_param: recursion_limit
+    budget_value: 6
+    expected_llm_calls: 3
+    rationale: "6 recursions = 3 pairs of (LLM node + tool node)"
+
+  crewai:
+    budget_param: max_iter
+    budget_value: 3
+    expected_llm_calls: "3-6"
+    rationale: "CrewAI may make internal parsing/retry calls not visible as tool iterations"
+
+  adk:
+    budget_param: max_iterations
+    budget_value: 3
+    expected_llm_calls: 3
+    rationale: "Each iteration = one full LLM call + tool execution cycle"
+
+dimensions_to_observe:
+  D1_iteration_unit:
+    question: "What does one 'iteration' count?"
+    possible_values:
+      - "llm_call_only"
+      - "llm_call_plus_tool_result"
+      - "any_message"
+      - "node_execution"
+      - "tool_use_loop"
+
+  D2_token_accounting:
+    question: "What tokens count against budget (if token-based)?"
+    possible_values:
+      - "prompt_only"
+      - "completion_only"
+      - "total"
+      - "not_applicable_iteration_based"
+
+  D3_enforcement_point:
+    question: "When does enforcement happen?"
+    possible_values:
+      - "before_llm_call"
+      - "after_llm_call"
+      - "after_tool_execution"
+      - "at_message_append"
+
+  D4_exhaustion_behavior:
+    question: "What happens when budget is exhausted?"
+    possible_values:
+      - "raise_exception"
+      - "return_partial_result"
+      - "inject_stop_message"
+      - "silent_truncation"
+
+  D5_engine_vs_derived:
+    question: "Are reported counts from the LLM engine or derived by framework?"
+    possible_values:
+      - "engine_usage_field"
+      - "framework_counted"
+      - "both_but_may_disagree"
+
+  D6_runtime_readability:
+    question: "Can an external observer reconstruct the budget state at any point?"
+    possible_values:
+      - "yes_via_callbacks"
+      - "yes_via_events"
+      - "partial"
+      - "no_internal_only"

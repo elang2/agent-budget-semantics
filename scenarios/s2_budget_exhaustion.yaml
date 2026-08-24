@@ -1,0 +1,147 @@
+name: S2 - Budget Exhaustion
+description: |
+  Agent with a tool that always requests another call. Budget should stop it.
+  Exactly 10 turns scripted. Each turn: the LLM calls get_weather, which returns
+  a result that causes the LLM to call get_weather again with a different city.
+  A framework with max_iterations=3 should stop after 3 tool-call rounds.
+
+  Ground truth token counts per turn are fixed so we can detect whether the
+  framework counts prompt tokens, completion tokens, or total tokens against
+  its budget.
+
+tool_definitions:
+  - name: get_weather
+    description: "Get weather for a city"
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+          description: "City name"
+      required: ["city"]
+
+budget_configs:
+  autogen:
+    parameter: "max_turns"
+    values_to_test: [3, 5]
+  openai_agents:
+    parameter: "max_turns"
+    values_to_test: [3, 5]
+  langchain:
+    parameter: "max_iterations"
+    values_to_test: [3, 5]
+  langgraph:
+    parameter: "recursion_limit"
+    values_to_test: [6, 10]
+  crewai:
+    parameter: "max_iter"
+    values_to_test: [3, 5]
+  adk:
+    parameter: "max_iterations"
+    values_to_test: [3, 5]
+
+script:
+  - content: null
+    prompt_tokens: 100
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_001"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Seattle"}'
+
+  - content: null
+    prompt_tokens: 150
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_002"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Portland"}'
+
+  - content: null
+    prompt_tokens: 200
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_003"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "San Francisco"}'
+
+  - content: null
+    prompt_tokens: 250
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_004"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Los Angeles"}'
+
+  - content: null
+    prompt_tokens: 300
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_005"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Denver"}'
+
+  - content: null
+    prompt_tokens: 350
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_006"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Chicago"}'
+
+  - content: null
+    prompt_tokens: 400
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_007"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "New York"}'
+
+  - content: null
+    prompt_tokens: 450
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_008"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Boston"}'
+
+  - content: null
+    prompt_tokens: 500
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_009"
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Miami"}'
+
+  - content: "I've checked the weather for all requested cities. The weather varies significantly across the country today."
+    prompt_tokens: 550
+    completion_tokens: 30
+    finish_reason: stop
+    tool_calls: null

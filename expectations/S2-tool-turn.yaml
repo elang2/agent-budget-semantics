@@ -1,0 +1,57 @@
+# Expected divergences for S2-tool-turn scenario
+# These are hypotheses based on framework documentation and source code analysis.
+# The harness validates them against actual execution.
+
+scenario: S2-tool-turn
+
+ground_truth:
+  total_llm_calls: 4
+  total_tokens: 478
+  tool_calls_made: 1
+  script_turns_consumed: 4
+
+expected_divergences:
+  D1_iteration_unit:
+    autogen:
+      expected: "yes_tool_turn_is_iteration"
+      rationale: >
+        AutoGen's MaxMessageTermination counts all messages including tool
+        call/result messages. With max_messages=2, it stops early.
+    google_adk:
+      expected: "no_only_user_facing_counts"
+      rationale: >
+        ADK's max_iterations counts agent "turns" not LLM calls.
+        A tool call and its result are part of the same turn.
+    openai_agents:
+      expected: "configurable"
+      rationale: >
+        OpenAI Agents SDK uses max_turns which counts handoffs and
+        tool-use loops differently depending on configuration.
+    langgraph:
+      expected: "yes_tool_turn_is_iteration"
+      rationale: >
+        LangGraph's recursion_limit counts graph steps, and each
+        tool invocation is a separate step.
+
+  D2_token_accounting:
+    note: >
+      Most frameworks count all tokens from usage response.
+      The disagreement is whether token budget enforcement uses
+      prompt_tokens (which grow with context) or only completion_tokens.
+
+  D3_enforcement_point:
+    note: >
+      Pre-call enforcement means the framework checks budget BEFORE
+      sending the next request. Post-call means it checks after receiving
+      the response and deciding whether to continue.
+
+  D4_exhaustion_behavior:
+    autogen:
+      expected: "return_partial"
+      rationale: "Returns whatever messages were produced before termination"
+    google_adk:
+      expected: "return_partial"
+      rationale: "Returns accumulated response"
+    langgraph:
+      expected: "raise_exception"
+      rationale: "GraphRecursionError raised when recursion_limit hit"

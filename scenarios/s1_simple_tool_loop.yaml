@@ -1,0 +1,56 @@
+name: S1 - Simple Tool Loop
+description: |
+  Baseline scenario: agent calls a tool 3 times then stops naturally.
+  Used to verify basic counting works before budget enforcement scenarios.
+  No budget should fire here (natural stop before any reasonable limit).
+
+tool_definitions:
+  - name: calculate
+    description: "Perform arithmetic"
+    parameters:
+      type: object
+      properties:
+        expression:
+          type: string
+          description: "Math expression to evaluate"
+      required: ["expression"]
+
+script:
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 20
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_001"
+        type: function
+        function:
+          name: calculate
+          arguments: '{"expression": "2 + 2"}'
+
+  - content: null
+    prompt_tokens: 120
+    completion_tokens: 20
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_002"
+        type: function
+        function:
+          name: calculate
+          arguments: '{"expression": "4 * 3"}'
+
+  - content: null
+    prompt_tokens: 160
+    completion_tokens: 20
+    finish_reason: tool_calls
+    tool_calls:
+      - id: "call_003"
+        type: function
+        function:
+          name: calculate
+          arguments: '{"expression": "12 / 4"}'
+
+  - content: "The calculations are complete. 2+2=4, 4*3=12, and 12/4=3."
+    prompt_tokens: 200
+    completion_tokens: 25
+    finish_reason: stop
+    tool_calls: null
