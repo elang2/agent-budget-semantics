@@ -1,0 +1,135 @@
+# S3: Multi-agent delegation — the D5/D6 discriminator
+#
+# Tests how budget is shared/partitioned when a parent agent delegates to a child.
+# This scenario exposes whether budget is:
+#   a) Shared pool (parent + child draw from same budget)
+#   b) Per-agent (each agent gets its own budget independently)
+#   c) Inherited (child gets parent's remaining budget)
+#   d) Configurable (framework offers multiple modes)
+#
+# The mock script has 8 turns: parent thinks (2), delegates (1), child works (3), parent summarizes (2)
+
+name: S3-multi-agent-delegation
+description: >
+  Parent agent receives a task, plans, delegates part of it to a child agent,
+  child executes with tool calls, parent incorporates and responds.
+  Budget is set to max_iterations=3. The question is whether the child's
+  iterations count against the parent's budget.
+
+budget:
+  max_iterations: 3
+  max_tokens: 15000
+
+tools:
+  - name: get_weather
+    description: Get current weather for a city
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+      required:
+        - city
+  - name: delegate_to_researcher
+    description: Delegate a sub-task to a research agent
+    parameters:
+      type: object
+      properties:
+        task:
+          type: string
+      required:
+        - task
+
+task: "Compare weather in Tokyo and London and recommend which is better for a picnic today."
+
+script:
+  # Parent planning
+  - content: "I'll need to check weather in both cities. Let me delegate the research."
+    prompt_tokens: 60
+    completion_tokens: 20
+    finish_reason: stop
+
+  # Parent delegates
+  - content: null
+    prompt_tokens: 100
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_d01
+        type: function
+        function:
+          name: delegate_to_researcher
+          arguments: '{"task": "Get weather for Tokyo and London"}'
+
+  # Child: first tool call (Tokyo)
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_c01
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Tokyo"}'
+
+  # Child: second tool call (London)
+  - content: null
+    prompt_tokens: 120
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_c02
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "London"}'
+
+  # Child: summarizes findings
+  - content: "Tokyo is 22C sunny, London is 15C cloudy."
+    prompt_tokens: 160
+    completion_tokens: 15
+    finish_reason: stop
+
+  # Parent incorporates child result
+  - content: "Based on the research, Tokyo at 22C and sunny is clearly better for a picnic than London at 15C and cloudy."
+    prompt_tokens: 200
+    completion_tokens: 30
+    finish_reason: stop
+
+  # Extra turns if budget allows
+  - content: "Would you also like restaurant recommendations near parks in Tokyo?"
+    prompt_tokens: 240
+    completion_tokens: 20
+    finish_reason: stop
+
+  - content: "I can suggest Yoyogi Park or Shinjuku Gyoen for the picnic."
+    prompt_tokens: 280
+    completion_tokens: 18
+    finish_reason: stop
+
+expected_total_tokens: 1108
+
+dimensions:
+  D5_budget_delegation:
+    question: "How does budget work across parent-child agent boundaries?"
+    possible_values:
+      - "shared_pool"
+      - "per_agent_independent"
+      - "inherited_remaining"
+      - "parent_only_child_unlimited"
+      - "configurable"
+    note: >
+      With budget=3 and shared_pool: stops after turn 3 (child's first tool call).
+      With per_agent: parent gets 3, child gets 3 = 6 total iterations possible.
+      With parent_only: parent's 3 iterations, child runs unlimited within delegation.
+
+  D6_delegation_cost:
+    question: "Does the act of delegating itself consume a budget unit?"
+    possible_values:
+      - "delegation_is_iteration"
+      - "delegation_is_free"
+      - "delegation_is_tool_call"
+    note: >
+      If delegation counts as an iteration, parent has only 2 left after delegating.
+      If free, the parent-level budget is preserved for actual work.

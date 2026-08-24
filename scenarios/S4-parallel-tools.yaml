@@ -1,0 +1,90 @@
+# S4: Parallel tool calls — the D7 discriminator
+#
+# Tests how budget counts when the LLM requests multiple tools in a single response.
+# OpenAI's API allows returning multiple tool_calls in one completion.
+# Frameworks disagree on whether N parallel tool calls = 1 iteration or N iterations.
+
+name: S4-parallel-tools
+description: >
+  Agent receives a task requiring data from 3 cities simultaneously.
+  The LLM requests all 3 tool calls in a single response (parallel tool use).
+  Budget is set to max_iterations=2. If parallel tools count as 1 iteration,
+  the agent completes. If each tool call is a separate iteration, it's budget-killed.
+
+budget:
+  max_iterations: 2
+  max_tokens: 10000
+
+tools:
+  - name: get_weather
+    description: Get current weather for a city
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+      required:
+        - city
+
+task: "What's the weather in Tokyo, London, and New York right now?"
+
+script:
+  # Turn 1: LLM requests 3 parallel tool calls
+  - content: null
+    prompt_tokens: 60
+    completion_tokens: 45
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_p01
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "Tokyo"}'
+      - id: call_p02
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "London"}'
+      - id: call_p03
+        type: function
+        function:
+          name: get_weather
+          arguments: '{"city": "New York"}'
+
+  # Turn 2: LLM produces final answer after getting all 3 results
+  - content: "Here's the current weather: Tokyo 22C sunny, London 15C cloudy, New York 28C partly cloudy."
+    prompt_tokens: 180
+    completion_tokens: 30
+    finish_reason: stop
+
+  # Extra turn if budget somehow allows
+  - content: "Would you like a comparison or packing recommendations?"
+    prompt_tokens: 220
+    completion_tokens: 15
+    finish_reason: stop
+
+expected_total_tokens: 370
+
+dimensions:
+  D7_parallel_tool_counting:
+    question: "Do N parallel tool calls in one LLM response count as 1 or N iterations?"
+    possible_values:
+      - "one_iteration_per_response"
+      - "one_iteration_per_tool_call"
+      - "configurable"
+    note: >
+      Semantic Kernel: 1 iteration (one auto-invoke attempt covers all parallel calls)
+      LangGraph: 1 iteration (one graph step processes all tool results)
+      AutoGen: potentially N (each tool result is a separate message)
+      CrewAI: 1 iteration (one "action step" regardless of parallelism)
+      This is critical for OTel: does iteration_budget.consumed increment by 1 or N?
+
+  D8_partial_parallel_execution:
+    question: "If budget exhausts mid-parallel-batch, are remaining tools skipped?"
+    possible_values:
+      - "all_or_nothing"
+      - "execute_partial"
+      - "never_happens_batch_is_atomic"
+    note: >
+      If a framework counts each tool call separately and budget=2 with 3 parallel
+      calls, does it execute 2 and skip the 3rd? Or treat the batch atomically?

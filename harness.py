@@ -35,6 +35,8 @@ RUNNERS = {
     "langgraph": "runners.runner_langgraph",
     "crewai": "runners.runner_crewai",
     "adk": "runners.runner_adk",
+    "semantic_kernel": "runners.runner_semantic_kernel",
+    "anthropic": "runners.runner_anthropic",
 }
 
 MOCK_PORT = 9111
