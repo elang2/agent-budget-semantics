@@ -3,7 +3,7 @@ name = "agent-budget-semantics"
 version = "0.1.0"
 description = "Differential testing of budget enforcement semantics across AI agent frameworks"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 authors = [
     {name = "Elankumaran Srinivasan"}
 ]
@@ -40,6 +40,9 @@ all = [
     "agent-budget-semantics[adk]",
 ]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["runners", "mock-llm"]
 
 [build-system]
 requires = ["hatchling"]
