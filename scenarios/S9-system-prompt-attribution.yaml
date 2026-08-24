@@ -1,0 +1,137 @@
+# S9: System prompt token attribution — the D17 discriminator
+#
+# Tests how system prompt tokens are counted across multiple turns.
+# A large system prompt (500 tokens) is sent with every LLM call.
+# Some frameworks count it once (first turn). Others count it every turn.
+# Some don't count it toward the agent's budget at all.
+#
+# This matters enormously for token budget accuracy:
+#   5-turn conversation with 500-token system prompt:
+#     Count once: 500 tokens attributed to system
+#     Count every turn: 2500 tokens attributed to system
+#     Don't count: 0 tokens attributed to system
+#
+# Real-world impact: A complex agent persona prompt (1000+ tokens)
+# can consume 30-50% of a token budget if counted every turn.
+
+name: S9-system-prompt-attribution
+description: >
+  Agent has a large system prompt (500 tokens). It runs 4 turns.
+  Token budget is 1500. If system prompt is counted every turn,
+  system alone consumes 2000 tokens (over budget by turn 4).
+  If counted once, system uses 500, leaving 1000 for actual work.
+
+budget:
+  max_iterations: 6
+  max_tokens: 1500
+
+system_prompt: >
+  You are a specialized financial analyst with expertise in derivatives
+  pricing, risk management, and regulatory compliance. Your responses
+  must include confidence intervals and cite relevant Basel III/IV
+  requirements. Always show your work including intermediate calculations.
+  Format outputs as structured tables where applicable. Flag any
+  assumptions made. Cross-reference with historical data where relevant.
+  [This prompt is approximately 500 tokens when tokenized]
+
+system_prompt_tokens: 500
+
+tools:
+  - name: get_market_data
+    description: Get current market data for a symbol
+    parameters:
+      type: object
+      properties:
+        symbol:
+          type: string
+        metric:
+          type: string
+      required:
+        - symbol
+
+task: "Analyze AAPL options chain and calculate implied volatility surface."
+
+script:
+  # Turn 1: system(500) + user(40) + completion(25) = 565 cumulative
+  - content: null
+    prompt_tokens: 540
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_sp01
+        type: function
+        function:
+          name: get_market_data
+          arguments: '{"symbol": "AAPL", "metric": "options_chain"}'
+
+  # Turn 2: system(500) + history(100) + tool_result(200) + completion(30)
+  # prompt_tokens includes re-sent system prompt
+  - content: null
+    prompt_tokens: 840
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_sp02
+        type: function
+        function:
+          name: get_market_data
+          arguments: '{"symbol": "AAPL", "metric": "historical_vol"}'
+
+  # Turn 3: system(500) + growing history + tool_result
+  - content: null
+    prompt_tokens: 1150
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_sp03
+        type: function
+        function:
+          name: get_market_data
+          arguments: '{"symbol": "AAPL", "metric": "risk_free_rate"}'
+
+  # Turn 4: Final analysis
+  - content: "AAPL IV surface analysis: 30-day ATM IV at 28.3% (±1.2%), 60-day at 31.1%. Skew is -2.4 vol points per 10 delta. Risk-weighted exposure under Basel III SA-CCR: $1.2M notional equivalent."
+    prompt_tokens: 1480
+    completion_tokens: 55
+    finish_reason: stop
+
+  # Turn 5: Only if budget allows
+  - content: "Shall I run a stress test scenario?"
+    prompt_tokens: 1600
+    completion_tokens: 12
+    finish_reason: stop
+
+expected_total_tokens: 4167
+
+dimensions:
+  D17_system_prompt_budget_attribution:
+    question: "How are system prompt tokens attributed in the token budget?"
+    possible_values:
+      - "counted_once_first_turn_only"
+      - "counted_every_turn"
+      - "not_counted_toward_budget"
+      - "counted_but_amortized"
+    note: >
+      Token budget = 1500. System prompt = 500 tokens.
+
+      If counted every turn: 500*4 = 2000 just from system prompt → over budget at turn 3
+      If counted once: 500 + actual work tokens
+      If not counted: only user/assistant/tool tokens count
+
+      This is a design choice that's NEVER specified in any framework's docs.
+      We only discover it by running the same scenario and comparing when
+      the budget enforcement triggers.
+
+  D18_system_prompt_telemetry:
+    question: "How is the system prompt represented in OTel spans?"
+    possible_values:
+      - "separate_span_attribute"
+      - "included_in_prompt_tokens"
+      - "own_span_per_invocation"
+      - "amortized_across_conversation"
+    note: >
+      Proposed OTel attribute: gen_ai.agent.token_budget.consumed
+      If system prompt is counted in every turn's prompt_tokens, the consumed
+      value grows 500 tokens per turn faster than if it's attributed once.
+      Two implementations of the same OTel spec could report wildly different
+      consumed values based on system prompt handling alone.

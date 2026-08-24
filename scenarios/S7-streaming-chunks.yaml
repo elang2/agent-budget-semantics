@@ -1,0 +1,111 @@
+# S7: Streaming responses — the D13 discriminator
+#
+# Tests how frameworks count iterations when the LLM streams its response.
+# Some frameworks wait for the complete response (1 iteration).
+# Others count individual SSE chunks or flush events.
+# A third category counts "reasoning tokens" separately from "output tokens".
+#
+# The mock LLM serves a response in 3 chunks, then a tool call, then final.
+# Framework iteration budget is set to 2.
+#
+# Framework behavior (expected):
+#   AutoGen: Waits for complete response, 1 turn per complete message
+#   OpenAI Agents: Counts complete responses regardless of streaming
+#   LangChain: Stream doesn't affect iteration counting
+#   LangGraph: Each node visit = 1, independent of streaming
+#   CrewAI: No streaming support in iteration counting
+#   ADK: Complete response = 1 iteration
+#   SK: Auto-invoke attempts counted after stream completes
+#   Anthropic: Client-side, stream is transparent
+#   Swarm: Messages in history after stream completes
+#   LlamaIndex: ReAct step completion, not stream events
+#   Agno: Cycle-based, stream irrelevant
+
+name: S7-streaming-chunks
+description: >
+  Agent receives a streamed response (3 chunks), then a tool call, then final.
+  Budget = 2 iterations. The streaming itself shouldn't consume extra budget,
+  but some frameworks expose partial streaming metrics that could be mistaken
+  for iteration counts in OTel telemetry.
+
+budget:
+  max_iterations: 2
+  max_tokens: 10000
+
+tools:
+  - name: search
+    description: Search for information
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+      required:
+        - query
+
+task: "Search for recent news about AI safety and summarize."
+
+# When streaming=true in the request, the mock will send SSE chunks
+# but the harness records a single entry per complete response.
+streaming: true
+
+script:
+  # Turn 1: LLM streams "Let me search..." then emits tool call
+  # (In streaming mode, this arrives as 3 data: chunks then tool_call)
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 35
+    finish_reason: tool_calls
+    stream_chunks: 3
+    tool_calls:
+      - id: call_s01
+        type: function
+        function:
+          name: search
+          arguments: '{"query": "AI safety news 2026"}'
+
+  # Turn 2: After tool result, LLM produces final answer
+  - content: "Based on my search, recent AI safety developments include new governance frameworks from the EU and updated NIST guidelines on model evaluation."
+    prompt_tokens: 180
+    completion_tokens: 40
+    finish_reason: stop
+    stream_chunks: 5
+
+  # Turn 3: Would only reach here if budget > 2
+  - content: "Would you like me to search for more specific topics?"
+    prompt_tokens: 240
+    completion_tokens: 15
+    finish_reason: stop
+
+dimensions:
+  D13_streaming_chunk_counting:
+    question: "Does streaming affect iteration/budget counting?"
+    possible_values:
+      - "transparent_no_effect"
+      - "chunks_counted_separately"
+      - "stream_events_in_metrics_but_not_budget"
+      - "streaming_disabled_falls_back_to_sync"
+    note: >
+      For OTel telemetry:
+        gen_ai.agent.iteration_budget.consumed should be the same regardless
+        of whether streaming is enabled. But frameworks that expose streaming
+        metrics (e.g., gen_ai.client.token_usage per chunk) create confusion
+        about what "consumed" means in the iteration context.
+
+      The divergence here isn't in budget enforcement (most frameworks are
+      transparent to streaming for budget purposes) but in what TELEMETRY
+      gets emitted. A framework that emits per-chunk spans creates N spans
+      per iteration, while one that emits per-response creates 1.
+
+  D14_streaming_token_attribution:
+    question: "Are streaming tokens attributed to a single usage record or multiple?"
+    possible_values:
+      - "single_usage_after_stream_complete"
+      - "incremental_usage_per_chunk"
+      - "usage_only_in_final_chunk"
+      - "no_usage_during_stream"
+    note: >
+      OpenAI's API reports usage only in the final chunk (or in a
+      stream_options: {include_usage: true} final message). But some
+      frameworks track token counts incrementally during streaming.
+      This affects gen_ai.agent.token_budget.consumed accuracy mid-stream.

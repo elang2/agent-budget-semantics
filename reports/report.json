@@ -1,0 +1,93 @@
+{
+  "scenario": "S2-budget-exhaustion",
+  "ground_truth": {
+    "llm_calls": 4,
+    "tool_calls": 3,
+    "total_tokens": 478,
+    "budget_limit": 3
+  },
+  "frameworks": {
+    "autogen": {
+      "consumed": 7,
+      "utilization": 2.3333333333333335,
+      "exceeded": true,
+      "budget_param": "max_turns"
+    },
+    "openai_agents": {
+      "consumed": 4,
+      "utilization": 1.3333333333333333,
+      "exceeded": true,
+      "budget_param": "max_turns"
+    },
+    "langchain": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "max_iterations"
+    },
+    "langgraph": {
+      "consumed": 7,
+      "utilization": 2.3333333333333335,
+      "exceeded": true,
+      "budget_param": "recursion_limit"
+    },
+    "crewai": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "max_iter"
+    },
+    "adk": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "max_iterations"
+    },
+    "semantic_kernel": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "maximum_auto_invoke_attempts"
+    },
+    "anthropic": {
+      "consumed": 4,
+      "utilization": 1.3333333333333333,
+      "exceeded": true,
+      "budget_param": "NONE (client-side only)"
+    },
+    "swarm": {
+      "consumed": 10,
+      "utilization": 3.3333333333333335,
+      "exceeded": true,
+      "budget_param": "max_turns"
+    },
+    "llamaindex": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "max_iterations"
+    },
+    "agno": {
+      "consumed": 3,
+      "utilization": 1.0,
+      "exceeded": false,
+      "budget_param": "max_iterations"
+    }
+  },
+  "summary": {
+    "unique_consumed_values": [
+      3,
+      4,
+      7,
+      10
+    ],
+    "disagreement_factor": 4,
+    "frameworks_exceeded": [
+      "autogen",
+      "openai_agents",
+      "langgraph",
+      "anthropic",
+      "swarm"
+    ]
+  }
+}

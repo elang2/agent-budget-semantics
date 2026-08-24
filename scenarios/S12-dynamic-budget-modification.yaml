@@ -1,0 +1,147 @@
+# S12: Dynamic budget modification — the D23 discriminator
+#
+# Tests whether and how frameworks handle budget changes mid-execution.
+# In production, you might want to:
+#   - Increase budget when the agent is making progress
+#   - Decrease budget when cost is running over
+#   - Grant "bonus" iterations for complex subtasks
+#
+# This scenario starts with budget=2, then a callback/hook increases it to 4.
+# How do frameworks handle this? Most don't support it at all.
+#
+# Framework behavior:
+#   AutoGen: Can modify via callback (register_reply hooks)
+#   OpenAI Agents: max_turns is fixed at invocation, no mid-run change
+#   LangChain: max_iterations is constructor param, not mutable mid-run
+#   LangGraph: recursion_limit is per-invocation, checked each step
+#   CrewAI: max_iter set at task level, not changeable during execution
+#   ADK: max_iterations configurable but not typically changed mid-run
+#   SK: maximum_auto_invoke_attempts is a settings object, theoretically mutable
+#   Anthropic: No budget concept to modify
+#   Swarm: max_turns checked per message, could be changed on context object
+#   LlamaIndex: max_iterations is agent constructor param, immutable
+#   Agno: max_iterations per-run param, not mid-run adjustable
+
+name: S12-dynamic-budget-modification
+description: >
+  Agent starts with budget=2. After first iteration succeeds, an external
+  hook/callback increases the budget to 4. The agent should be able to
+  continue for 3 more iterations (4 total). If the framework doesn't
+  support dynamic modification, it stops at 2 regardless.
+
+budget:
+  max_iterations: 2
+  dynamic_increase_after_turn_1: 4
+
+tools:
+  - name: research
+    description: Research a topic
+    parameters:
+      type: object
+      properties:
+        topic:
+          type: string
+      required:
+        - topic
+
+  - name: validate
+    description: Validate findings
+    parameters:
+      type: object
+      properties:
+        claim:
+          type: string
+      required:
+        - claim
+
+task: "Research AI governance frameworks, validate key claims, produce summary."
+
+script:
+  # Turn 1: Initial research (budget still = 2)
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_dm01
+        type: function
+        function:
+          name: research
+          arguments: '{"topic": "AI governance frameworks 2026"}'
+
+  # [After Turn 1: external hook increases budget from 2 to 4]
+
+  # Turn 2: More research (if budget was increased, this is 2/4 not 2/2)
+  - content: null
+    prompt_tokens: 200
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_dm02
+        type: function
+        function:
+          name: research
+          arguments: '{"topic": "EU AI Act implementation timeline"}'
+
+  # Turn 3: Validation (only reaches here if budget > 2)
+  - content: null
+    prompt_tokens: 350
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_dm03
+        type: function
+        function:
+          name: validate
+          arguments: '{"claim": "EU AI Act requires conformity assessment for high-risk systems by August 2027"}'
+
+  # Turn 4: Final answer (budget = 4, this is the last allowed iteration)
+  - content: "AI Governance Summary: The EU AI Act is the most comprehensive framework, requiring conformity assessments for high-risk AI by Aug 2027. NIST AI RMF provides voluntary guidelines. Both converge on risk-based tiering."
+    prompt_tokens: 450
+    completion_tokens: 50
+    finish_reason: stop
+
+  # Turn 5: Would only reach if budget somehow > 4
+  - content: "Additional governance frameworks exist in China, UK, and Singapore."
+    prompt_tokens: 550
+    completion_tokens: 20
+    finish_reason: stop
+
+expected_total_tokens: 1285
+
+dimensions:
+  D23_dynamic_budget_support:
+    question: "Can the framework's budget be modified mid-execution?"
+    possible_values:
+      - "fully_dynamic_via_callback"
+      - "mutable_settings_object"
+      - "immutable_after_start"
+      - "no_budget_concept"
+    note: >
+      With initial_budget=2 and dynamic_increase_to=4:
+        Frameworks that support dynamic: agent runs 4 turns
+        Frameworks that don't: agent stops at 2 turns
+
+      If both report gen_ai.agent.iteration_budget.limit:
+        Dynamic framework: limit=4 (final value)
+        Static framework: limit=2 (initial value)
+
+      Should the OTel attribute report initial or final budget?
+      If initial: limit=2, consumed=4 → utilization > 100% (confusing)
+      If final: limit=4, consumed=4 → 100% (makes sense but hides the modification)
+
+      This is an unresolved spec question. The semantic convention doesn't
+      say whether .limit is a point-in-time snapshot or the final value.
+
+  D24_budget_modification_telemetry:
+    question: "How should budget modifications be represented in telemetry?"
+    possible_values:
+      - "budget_change_event_on_span"
+      - "only_final_values_reported"
+      - "initial_and_final_both_reported"
+      - "not_representable"
+    note: >
+      Proposal: gen_ai.agent.iteration_budget.limit should be the INITIAL value.
+      A new event gen_ai.agent.budget_modified (with old_limit, new_limit, reason)
+      would capture dynamic changes. Without this, an observer can't distinguish
+      "budget was always 4" from "budget started at 2 and was increased to 4."

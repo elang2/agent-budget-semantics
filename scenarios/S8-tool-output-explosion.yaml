@@ -1,0 +1,136 @@
+# S8: Tool output size explosion — the D15 discriminator
+#
+# Tests whether large tool outputs count against token budget.
+# A tool returns a massive response (5000 tokens). The framework must
+# decide: does this count toward the agent's cumulative token budget?
+#
+# This exposes a critical real-world divergence:
+#   - Frameworks that count tool output: budget exhausts after 1-2 calls
+#   - Frameworks that only count LLM tokens: budget lasts the full run
+#   - Frameworks that count prompt growth: gradual exhaustion
+#
+# Framework behavior:
+#   AutoGen: Token callbacks can include tool output in cumulative count
+#   LangChain: max_tokens is per-LLM-call only (tool output is free)
+#   LangGraph: No token budget concept (only recursion_limit)
+#   CrewAI: max_rpm only (tool output doesn't affect budget)
+#   ADK: Configurable — can include or exclude tool output
+#   SK: Per-call max_tokens only (no cumulative tracking)
+#   Anthropic: max_tokens per response (tool output feeds next prompt)
+#   Swarm: No token budget (only max_turns on messages)
+#   LlamaIndex: max_function_calls budget, not token-based
+#   Agno: output_token_budget counts LLM output only, not tool output
+
+name: S8-tool-output-explosion
+description: >
+  Agent calls a tool that returns a huge response (simulated 5000 tokens).
+  Token budget is set to 2000 cumulative. The question: does the tool
+  output count toward that budget? If yes, budget exhausts immediately.
+  If no, the agent continues normally.
+
+budget:
+  max_iterations: 10
+  max_tokens: 2000
+
+tools:
+  - name: fetch_document
+    description: Fetch a large document by ID
+    parameters:
+      type: object
+      properties:
+        doc_id:
+          type: string
+      required:
+        - doc_id
+
+  - name: summarize
+    description: Summarize text
+    parameters:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+
+task: "Fetch document ABC-123, then summarize it."
+
+tool_behavior:
+  fetch_document:
+    - success: '{"content": "Lorem ipsum dolor sit amet... [LARGE DOCUMENT - 5000 tokens of content simulated here]. This document covers the complete regulatory framework for AI systems in the European Union, including all annexes and implementation guidelines. The total word count exceeds 15,000 words across 47 sections.", "token_count": 5000, "title": "EU AI Act Full Text"}'
+  summarize:
+    - success: '{"summary": "The EU AI Act establishes a risk-based framework for AI regulation.", "token_count": 25}'
+
+script:
+  # Turn 1: LLM decides to fetch the document
+  - content: null
+    prompt_tokens: 60
+    completion_tokens: 20
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_d01
+        type: function
+        function:
+          name: fetch_document
+          arguments: '{"doc_id": "ABC-123"}'
+
+  # Turn 2: After receiving the huge tool output, LLM's context grows massively
+  # The prompt_tokens here reflects the tool output being fed back
+  - content: null
+    prompt_tokens: 5200
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_d02
+        type: function
+        function:
+          name: summarize
+          arguments: '{"text": "Lorem ipsum..."}'
+
+  # Turn 3: Final answer after summarization
+  - content: "The document ABC-123 is the EU AI Act. It establishes a risk-based regulatory framework with four tiers of AI system classification."
+    prompt_tokens: 5300
+    completion_tokens: 35
+    finish_reason: stop
+
+  # Turn 4: Would only reach if budget allows
+  - content: "Would you like more details on any specific section?"
+    prompt_tokens: 5400
+    completion_tokens: 15
+    finish_reason: stop
+
+expected_total_tokens: 10660
+
+dimensions:
+  D15_tool_output_token_counting:
+    question: "Do tool output tokens count toward the agent's cumulative token budget?"
+    possible_values:
+      - "tool_output_counted_in_budget"
+      - "only_llm_tokens_counted"
+      - "prompt_growth_counted_indirectly"
+      - "no_cumulative_token_budget"
+    note: >
+      With budget=2000 tokens:
+        If tool output counted: budget exhausted at turn 2 (60+20+5200+30 = 5310 > 2000)
+        If only LLM output counted: 20+30+35 = 85, well under 2000
+        If prompt growth counted: 60+5200+5300 = 10560 prompt tokens, WAY over
+        If no cumulative budget: runs to completion regardless
+
+      This is a MASSIVE divergence. The same token budget (2000) either:
+        - Stops the agent after 1 tool call (if tool output counts)
+        - Lets it run indefinitely (if only LLM output counts)
+
+      For OTel: gen_ai.agent.token_budget.consumed could be 85 or 10660
+      for the exact same execution. That's a 125x difference in reported consumption.
+
+  D16_context_growth_attribution:
+    question: "How is growing context (from tool outputs) attributed in telemetry?"
+    possible_values:
+      - "attributed_to_tool_call_span"
+      - "attributed_to_next_llm_call"
+      - "split_across_both"
+      - "not_tracked"
+    note: >
+      When a tool returns 5000 tokens and the next LLM call has 5200 prompt tokens,
+      who "owns" those tokens in the OTel trace? The tool span? The next LLM span?
+      This matters for cost attribution and budget tracking.

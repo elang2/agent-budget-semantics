@@ -1,0 +1,167 @@
+# S10: Three-level delegation — the D19 discriminator
+#
+# Tests budget inheritance across A → B → C delegation chain.
+# Parent agent A (budget=6) delegates to B, which delegates to C.
+# How much budget does each level get?
+#
+# Framework behavior:
+#   AutoGen: GroupChat shares total budget across all agents
+#   OpenAI Agents: Each handoff creates new turn context, shared budget
+#   LangChain: No native delegation (would be custom)
+#   LangGraph: Subgraph inherits parent recursion_limit minus consumed
+#   CrewAI: Each agent gets own max_iter independently
+#   ADK: Sub-agents inherit remaining budget from parent
+#   SK: No multi-agent delegation concept
+#   Agno: Team-level budget pool shared across all members
+#   Swarm: Handoff continues in same turn counter
+
+name: S10-nested-delegation-chain
+description: >
+  Agent A has budget=6. It uses 1 iteration, then delegates to B.
+  B uses 2 iterations, then delegates to C. C uses 1 iteration.
+  Total work: 4 iterations. But how is budget distributed?
+  Does C inherit 3 remaining (6-1-2)? Or get fresh budget?
+  Or inherit B's remaining (B had... what exactly)?
+
+budget:
+  max_iterations: 6
+  max_tokens: 10000
+
+tools:
+  - name: delegate_to_specialist
+    description: Hand off task to a specialist sub-agent
+    parameters:
+      type: object
+      properties:
+        specialist:
+          type: string
+        task:
+          type: string
+      required:
+        - specialist
+        - task
+
+  - name: analyze_data
+    description: Run analysis on provided data
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+      required:
+        - query
+
+task: "Analyze quarterly revenue, delegate deep-dive to finance specialist, who delegates regulatory check to compliance."
+
+script:
+  # Agent A, Turn 1: Decides to delegate
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 30
+    finish_reason: tool_calls
+    agent: A
+    tool_calls:
+      - id: call_n01
+        type: function
+        function:
+          name: delegate_to_specialist
+          arguments: '{"specialist": "finance", "task": "deep-dive quarterly revenue Q3"}'
+
+  # Agent B (finance), Turn 1: Analyzes data
+  - content: null
+    prompt_tokens: 120
+    completion_tokens: 25
+    finish_reason: tool_calls
+    agent: B
+    tool_calls:
+      - id: call_n02
+        type: function
+        function:
+          name: analyze_data
+          arguments: '{"query": "Q3 revenue by segment"}'
+
+  # Agent B, Turn 2: Needs compliance check, delegates to C
+  - content: null
+    prompt_tokens: 200
+    completion_tokens: 30
+    finish_reason: tool_calls
+    agent: B
+    tool_calls:
+      - id: call_n03
+        type: function
+        function:
+          name: delegate_to_specialist
+          arguments: '{"specialist": "compliance", "task": "check revenue recognition rules for Q3 adjustments"}'
+
+  # Agent C (compliance), Turn 1: Does the compliance check
+  - content: null
+    prompt_tokens: 150
+    completion_tokens: 25
+    finish_reason: tool_calls
+    agent: C
+    tool_calls:
+      - id: call_n04
+        type: function
+        function:
+          name: analyze_data
+          arguments: '{"query": "ASC 606 applicability to Q3 adjustments"}'
+
+  # Agent C, Turn 2: Returns result to B
+  - content: "Compliance check complete. The Q3 revenue adjustments comply with ASC 606 Step 5 (recognize revenue when performance obligation satisfied). No restatement needed."
+    prompt_tokens: 220
+    completion_tokens: 40
+    finish_reason: stop
+    agent: C
+
+  # Agent B returns to A with combined result
+  - content: "Revenue analysis complete. Q3 revenue up 12% YoY. All adjustments ASC 606 compliant per compliance specialist."
+    prompt_tokens: 300
+    completion_tokens: 45
+    finish_reason: stop
+    agent: B
+
+  # Agent A produces final output
+  - content: "Quarterly analysis: Revenue grew 12% YoY in Q3, driven by enterprise segment. All figures verified compliant with ASC 606. No regulatory concerns."
+    prompt_tokens: 350
+    completion_tokens: 50
+    finish_reason: stop
+    agent: A
+
+expected_total_tokens: 1465
+
+dimensions:
+  D19_delegation_budget_inheritance:
+    question: "How is budget distributed across a 3-level delegation chain?"
+    possible_values:
+      - "shared_pool_total_6"
+      - "each_agent_gets_own_budget_6"
+      - "remaining_passed_down"
+      - "parent_budget_minus_own_consumption"
+      - "no_inheritance_each_unlimited"
+    note: >
+      With total budget=6 and 3 agents doing 7 total iterations:
+        Shared pool: A(1) + B(2) + C(2) + B(1) + A(1) = 7, exceeds 6
+        Each gets 6: total capacity = 18, 7 consumed, no problem
+        Remaining passed: A keeps 5, gives B 5. B keeps 3, gives C 3.
+        Parent minus consumed: A gives 6-1=5, B gives 5-2=3, C gets 3
+
+      gen_ai.agent.iteration_budget.consumed at the TOP level:
+        Shared: consumed=7 (all work)
+        Per-agent: consumed=1 (only A's work) — where did B and C go?
+        Remaining: consumed=7 (sum of all) or consumed=1 (just A)?
+
+  D20_delegation_cost_visibility:
+    question: "Is the parent agent's budget decremented by child execution?"
+    possible_values:
+      - "parent_sees_all_child_cost"
+      - "parent_only_sees_delegation_call"
+      - "child_cost_tracked_separately"
+      - "no_budget_tracking_across_boundary"
+    note: >
+      If Agent A delegates to B which uses 4 iterations:
+        Does A's consumed go from 1 to 5? (parent absorbs child cost)
+        Or stays at 2? (delegation = 1 iteration regardless of child work)
+
+      This directly affects gen_ai.invoke_agent spans. The invoke_agent
+      span's token_budget.consumed should include child work — but which
+      frameworks actually DO this?

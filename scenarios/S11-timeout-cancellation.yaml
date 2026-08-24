@@ -1,0 +1,137 @@
+# S11: Timeout and cancellation — the D21 discriminator
+#
+# Tests what happens when a tool call times out or the agent is cancelled.
+# Does the timed-out call consume a budget unit? Are the tokens counted?
+#
+# This is critical for production systems where timeouts are common.
+# A 30-second tool timeout that consumes budget means the agent loses
+# iterations to infrastructure failures, not actual work.
+#
+# Framework behavior:
+#   AutoGen: Timeout raises exception, counts as a turn
+#   OpenAI Agents: Tool timeout = turn consumed (tool_result with error)
+#   LangChain: Configurable via handle_tool_error
+#   LangGraph: Node execution timeout = step consumed
+#   CrewAI: Timeout doesn't count (part of "free retry" policy)
+#   ADK: Tool timeout treated as failed iteration
+#   SK: Timeout during auto-invoke counts as an attempt
+#   Anthropic: Client-side, timeout handling is caller's responsibility
+#   Swarm: Timeout adds error message to history = turn consumed
+
+name: S11-timeout-cancellation
+description: >
+  Agent calls a tool that times out (simulated). Budget = 3.
+  After timeout, agent retries with a simpler query that succeeds.
+  Then calls another tool. Does the timeout consume budget?
+  If yes: only 2 useful iterations remain. If no: full 3 remain.
+
+budget:
+  max_iterations: 3
+  max_tokens: 10000
+
+tools:
+  - name: query_database
+    description: Query a database (may be slow)
+    parameters:
+      type: object
+      properties:
+        sql:
+          type: string
+        timeout_ms:
+          type: integer
+      required:
+        - sql
+
+  - name: get_cache
+    description: Get from fast cache
+    parameters:
+      type: object
+      properties:
+        key:
+          type: string
+      required:
+        - key
+
+task: "Get total revenue for Q3 2026 from the data warehouse."
+
+tool_behavior:
+  query_database:
+    - timeout: true
+      error: "Query timed out after 30000ms. The query 'SELECT SUM(revenue)...' was cancelled."
+      partial_tokens: 45
+    - success: '{"result": 847000000, "rows": 1, "execution_time_ms": 234}'
+  get_cache:
+    - success: '{"value": 847000000, "cached_at": "2026-08-23T10:00:00Z"}'
+
+script:
+  # Turn 1: Agent tries the full query
+  - content: null
+    prompt_tokens: 80
+    completion_tokens: 30
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t01
+        type: function
+        function:
+          name: query_database
+          arguments: '{"sql": "SELECT SUM(revenue) FROM transactions WHERE quarter = ''Q3'' AND year = 2026", "timeout_ms": 30000}'
+
+  # Turn 2: After timeout error, agent tries cache instead
+  - content: null
+    prompt_tokens: 180
+    completion_tokens: 25
+    finish_reason: tool_calls
+    tool_calls:
+      - id: call_t02
+        type: function
+        function:
+          name: get_cache
+          arguments: '{"key": "q3_2026_total_revenue"}'
+
+  # Turn 3: Agent produces final answer
+  - content: "Q3 2026 total revenue: $847M (from cache, originally computed 2026-08-23)."
+    prompt_tokens: 250
+    completion_tokens: 20
+    finish_reason: stop
+
+  # Turn 4: Only reaches here if timeout didn't consume budget
+  - content: "Note: the live database query timed out so this uses cached data. Want me to try a narrower query?"
+    prompt_tokens: 300
+    completion_tokens: 25
+    finish_reason: stop
+
+expected_total_tokens: 610
+
+dimensions:
+  D21_timeout_budget_consumption:
+    question: "Does a timed-out tool call consume an iteration budget unit?"
+    possible_values:
+      - "timeout_consumes_budget"
+      - "timeout_is_free"
+      - "timeout_consumes_half"
+      - "configurable_per_framework"
+    note: >
+      With budget=3:
+        If timeout counts: turn 1 (timeout) + turn 2 (retry) + turn 3 (answer) = 3, DONE
+        If timeout free: turn 1 (retry) + turn 2 (answer) = 2, budget remaining = 1
+
+      For OTel: gen_ai.agent.iteration_budget.consumed = 3 or 2?
+      Same execution, same number of useful tool calls (2), same tokens,
+      but different consumed values depending on timeout policy.
+
+  D22_timeout_token_attribution:
+    question: "Are tokens from a timed-out request counted in the budget?"
+    possible_values:
+      - "full_tokens_counted"
+      - "only_prompt_tokens_counted"
+      - "no_tokens_counted"
+      - "partial_completion_tokens_counted"
+    note: >
+      The timed-out request consumed prompt_tokens (the server processed the prompt)
+      but may not have returned completion_tokens. Some frameworks:
+        - Count both prompt and partial completion tokens
+        - Count only the prompt (the request was made)
+        - Count nothing (the call "didn't happen" from budget perspective)
+
+      gen_ai.agent.token_budget.consumed diverges by 0-110 tokens
+      for the same execution depending on this policy.
