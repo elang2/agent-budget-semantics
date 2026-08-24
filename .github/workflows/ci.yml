@@ -87,5 +87,5 @@ jobs:
 
       - name: Run S2 scenario
         run: |
-          python harness.py --scenario scenarios/s2_budget_exhaustion.yaml --frameworks ${{ matrix.framework }}
+          python harness.py --scenario scenarios/S2-budget-exhaustion.yaml --frameworks ${{ matrix.framework }}
         continue-on-error: true

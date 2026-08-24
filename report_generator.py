@@ -215,29 +215,90 @@ def generate_otel_recommendations() -> str:
     return "\n".join(lines)
 
 
+FRAMEWORK_VERSIONS = {
+    "autogen": {"package": "autogen-agentchat", "version": "0.4.7", "tier": "modeled"},
+    "openai_agents": {"package": "openai-agents", "version": "0.1.1", "tier": "modeled"},
+    "langchain": {"package": "langchain", "version": "0.3.14", "tier": "modeled"},
+    "langgraph": {"package": "langgraph", "version": "0.3.21", "tier": "modeled"},
+    "crewai": {"package": "crewai", "version": "0.108.0", "tier": "modeled"},
+    "adk": {"package": "google-adk", "version": "1.2.1", "tier": "modeled"},
+    "semantic_kernel": {"package": "semantic-kernel", "version": "1.17.1", "tier": "modeled"},
+    "anthropic": {"package": "anthropic", "version": "0.39.0", "tier": "modeled"},
+    "swarm": {"package": "openai-swarm", "version": "0.1.0", "tier": "archived"},
+    "llamaindex": {"package": "llama-index-core", "version": "0.11.23", "tier": "modeled"},
+    "agno": {"package": "agno", "version": "1.2.5", "tier": "modeled"},
+}
+
+
+def _load_harness_results(scenario: str) -> dict:
+    """Load executed harness results if they exist. Returns {framework: result_dict}."""
+    results_dir = Path("results")
+    executed = {}
+    for path in results_dir.glob("*.json"):
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, list):
+                for entry in data:
+                    if entry.get("scenario") == scenario:
+                        fw = entry["framework"]
+                        executed[fw] = entry
+            elif isinstance(data, dict) and data.get("scenario") == scenario:
+                executed[data["framework"]] = data
+        except (json.JSONDecodeError, KeyError):
+            continue
+    return executed
+
+
 def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
                           total_tokens: int, budget_limit: int) -> dict:
-    """Generate structured JSON report for CI consumption."""
+    """Generate structured JSON report.
+
+    Prefers harness-executed results (provenance: "executed") when available
+    in results/. Falls back to _calculate_consumed() model predictions
+    (provenance: "modeled") otherwise.
+    """
+    harness_results = _load_harness_results(scenario)
+
     results = {}
     for fw in FRAMEWORK_BUDGET_SEMANTICS:
-        consumed = _calculate_consumed(fw, llm_calls, tool_calls)
+        if fw in harness_results:
+            hr = harness_results[fw]
+            gt = hr.get("ground_truth", {})
+            consumed = gt.get("llm_calls", 0) + gt.get("tool_calls", 0)
+            if "framework_reports" in hr:
+                fr = hr["framework_reports"]
+                consumed = fr.get("llm_calls", consumed)
+            provenance = "executed"
+            version = hr.get("framework_version", FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown"))
+        else:
+            consumed = _calculate_consumed(fw, llm_calls, tool_calls)
+            provenance = "modeled"
+            version = FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown")
+
         results[fw] = {
             "consumed": consumed,
-            "utilization": consumed / budget_limit if budget_limit > 0 else 0,
+            "utilization": round(consumed / budget_limit, 2) if budget_limit > 0 else 0,
             "exceeded": consumed > budget_limit,
             "budget_param": FRAMEWORK_BUDGET_SEMANTICS[fw]["budget_param"],
+            "counting_method": FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"],
+            "provenance": provenance,
+            "version": version,
         }
 
     consumed_values = sorted(set(r["consumed"] for r in results.values()))
+    executed_count = sum(1 for r in results.values() if r["provenance"] == "executed")
+    modeled_count = sum(1 for r in results.values() if r["provenance"] == "modeled")
 
     return {
         "scenario": scenario,
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "ground_truth": {
             "llm_calls": llm_calls,
             "tool_calls": tool_calls,
             "total_tokens": total_tokens,
             "budget_limit": budget_limit,
         },
+        "framework_versions": FRAMEWORK_VERSIONS,
         "frameworks": results,
         "summary": {
             "unique_consumed_values": consumed_values,
@@ -245,6 +306,10 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
             "frameworks_exceeded": [
                 fw for fw, r in results.items() if r["exceeded"]
             ],
+            "provenance_breakdown": {
+                "executed": executed_count,
+                "modeled": modeled_count,
+            },
         },
     }
 

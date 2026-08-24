@@ -1,77 +1,146 @@
 {
   "scenario": "S2-budget-exhaustion",
+  "validated": "2026-08-24",
   "ground_truth": {
     "llm_calls": 4,
     "tool_calls": 3,
     "total_tokens": 478,
     "budget_limit": 3
   },
+  "framework_versions": {
+    "autogen": {
+      "package": "autogen-agentchat",
+      "version": "0.4.7",
+      "tier": "executed"
+    },
+    "openai_agents": {
+      "package": "openai-agents",
+      "version": "0.1.1",
+      "tier": "executed"
+    },
+    "langchain": {
+      "package": "langchain",
+      "version": "0.3.14",
+      "tier": "executed"
+    },
+    "langgraph": {
+      "package": "langgraph",
+      "version": "0.3.21",
+      "tier": "executed"
+    },
+    "crewai": {
+      "package": "crewai",
+      "version": "0.108.0",
+      "tier": "executed"
+    },
+    "adk": {
+      "package": "google-adk",
+      "version": "1.2.1",
+      "tier": "executed"
+    },
+    "semantic_kernel": {
+      "package": "semantic-kernel",
+      "version": "1.17.1",
+      "tier": "executed"
+    },
+    "anthropic": {
+      "package": "anthropic",
+      "version": "0.39.0",
+      "tier": "executed"
+    },
+    "swarm": {
+      "package": "openai-swarm",
+      "version": "0.1.0",
+      "tier": "archived"
+    },
+    "llamaindex": {
+      "package": "llama-index-core",
+      "version": "0.11.23",
+      "tier": "executed"
+    },
+    "agno": {
+      "package": "agno",
+      "version": "1.2.5",
+      "tier": "executed"
+    }
+  },
   "frameworks": {
     "autogen": {
       "consumed": 7,
-      "utilization": 2.3333333333333335,
+      "utilization": 2.33,
       "exceeded": true,
-      "budget_param": "max_turns"
+      "budget_param": "max_turns",
+      "counting_method": "Each message (LLM response OR tool result) in the group chat"
     },
     "openai_agents": {
       "consumed": 4,
-      "utilization": 1.3333333333333333,
+      "utilization": 1.33,
       "exceeded": true,
-      "budget_param": "max_turns"
+      "budget_param": "max_turns",
+      "counting_method": "Each full LLM invocation"
     },
     "langchain": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iterations"
+      "budget_param": "max_iterations",
+      "counting_method": "Each tool-use cycle (action + observation)"
     },
     "langgraph": {
       "consumed": 7,
-      "utilization": 2.3333333333333335,
+      "utilization": 2.33,
       "exceeded": true,
-      "budget_param": "recursion_limit"
+      "budget_param": "recursion_limit",
+      "counting_method": "Each graph node execution"
     },
     "crewai": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iter"
+      "budget_param": "max_iter",
+      "counting_method": "Each tool-use cycle"
     },
     "adk": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iterations"
+      "budget_param": "max_iterations",
+      "counting_method": "Each full agent loop (plan + act + observe)"
     },
     "semantic_kernel": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "maximum_auto_invoke_attempts"
+      "budget_param": "maximum_auto_invoke_attempts",
+      "counting_method": "Each auto-invoke round"
     },
     "anthropic": {
       "consumed": 4,
-      "utilization": 1.3333333333333333,
+      "utilization": 1.33,
       "exceeded": true,
-      "budget_param": "NONE (client-side only)"
+      "budget_param": "NONE (client-side only)",
+      "counting_method": "Client-defined (no server concept)"
     },
     "swarm": {
       "consumed": 10,
-      "utilization": 3.3333333333333335,
+      "utilization": 3.33,
       "exceeded": true,
-      "budget_param": "max_turns"
+      "budget_param": "max_turns",
+      "counting_method": "Messages added to history since start"
     },
     "llamaindex": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iterations"
+      "budget_param": "max_iterations",
+      "counting_method": "Each ReAct step (Thought + Action + Observation)"
     },
     "agno": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iterations"
+      "budget_param": "max_iterations",
+      "counting_method": "Each tool-use cycle"
     }
   },
   "summary": {

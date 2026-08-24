@@ -16,9 +16,8 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     """Run scenario through Semantic Kernel with maximum_auto_invoke_attempts."""
     try:
         from semantic_kernel import Kernel
-        from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+        from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion, OpenAIChatPromptExecutionSettings
         from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
-        from semantic_kernel.connectors.ai.open_ai.prompt_execution_settings.open_ai_chat_prompt_execution_settings import OpenAIChatPromptExecutionSettings
         from semantic_kernel.contents.chat_history import ChatHistory
         from semantic_kernel.functions import kernel_function
     except ImportError as e:
@@ -35,12 +34,14 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
 
     tool_calls_observed = 0
 
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(base_url=mock_url + "/v1", api_key="mock-key")
+
     kernel = Kernel()
     service = OpenAIChatCompletion(
         service_id="mock",
         ai_model_id="mock-budget-llm",
-        base_url=mock_url + "/v1",
-        api_key="mock-key",
+        async_client=client,
     )
     kernel.add_service(service)
 

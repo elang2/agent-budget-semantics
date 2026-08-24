@@ -56,15 +56,26 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         elif td["name"] == "calculate":
             tools.append(calculate)
 
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    class LLMCounter(BaseCallbackHandler):
+        def __init__(self):
+            self.count = 0
+        def on_llm_start(self, *args, **kwargs):
+            self.count += 1
+
+    counter = LLMCounter()
+
     llm = ChatOpenAI(
         model="mock-budget-llm",
         base_url=mock_url + "/v1",
         api_key="mock-key",
+        disable_streaming=True,
+        callbacks=[counter],
     )
 
     graph = create_react_agent(llm, tools)
 
-    llm_calls = 0
     stopped_by = "natural"
 
     try:
@@ -72,10 +83,6 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             {"messages": [("user", "Check the weather in various cities.")]},
             config={"recursion_limit": budget_value},
         )
-
-        for msg in result.get("messages", []):
-            if hasattr(msg, 'type') and msg.type == "ai":
-                llm_calls += 1
 
     except GraphRecursionError:
         stopped_by = "budget"
@@ -89,7 +96,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
                 scenario=scenario["name"],
                 budget_param="recursion_limit",
                 budget_value=budget_value,
-                actual_llm_calls=llm_calls,
+                actual_llm_calls=counter.count,
                 actual_tool_calls=tool_calls_observed,
                 stopped_by="error",
                 error=error_msg,
@@ -100,7 +107,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         scenario=scenario["name"],
         budget_param="recursion_limit",
         budget_value=budget_value,
-        actual_llm_calls=llm_calls,
+        actual_llm_calls=counter.count,
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
     )

@@ -11,7 +11,7 @@ import pytest
 
 MOCK_PORT = 9222
 MOCK_URL = f"http://127.0.0.1:{MOCK_PORT}"
-SCENARIO_PATH = Path(__file__).parent.parent / "scenarios" / "s1_simple_tool_loop.yaml"
+SCENARIO_PATH = Path(__file__).parent.parent / "scenarios" / "S1-simple-tool-loop.yaml"
 
 
 @pytest.fixture(scope="module")

@@ -11,26 +11,35 @@ Differential testing of budget enforcement semantics across 11 AI agent framewor
 ## The Problem
 
 ```
-gen_ai.agent.iteration_budget.consumed = [3, 4, 7, 10]
+gen_ai.agent.iteration_budget.consumed = [3, 4, 5, 8]
 ```
 
-Same work. Same LLM calls. Same tokens consumed. Four different telemetry values depending on which framework is instrumented. Setting `budget=3` means something fundamentally different across frameworks.
+Same work. Same LLM calls. Same tokens consumed. Four different telemetry values across production frameworks. Setting `budget=3` means something fundamentally different depending on which framework is instrumented.
+
+Including archived/experimental frameworks (OpenAI Swarm), the spread widens to `[3, 4, 5, 8, 10]` with 5 unique values for identical execution.
 
 ## The Evidence
 
-| Framework | `budget=3` means | Parallel 3 tools | Error retry | Final answer |
-|-----------|-----------------|------------------|-------------|--------------|
-| AutoGen | 3 messages (LLM + tool mixed) | 3 budget units | Counts | Counts |
-| OpenAI Agents | 3 LLM invocations | 1 budget unit | Counts | Counts |
-| LangChain | 3 tool-call cycles | 1 budget unit | Configurable | Free |
-| LangGraph | 3 node executions | 1 budget unit | Counts | Counts |
-| CrewAI | 3 tool-use cycles | N/A | Free | Free extra call |
-| Google ADK | 3 full agent loops | 1 budget unit | Counts | Part of last |
-| Semantic Kernel | 3 auto-invoke attempts | 1 budget unit | Free | Not counted |
-| Anthropic | Client-defined | Client decides | Client decides | Client decides |
-| Swarm | Messages in history | 2N budget units | Counts | Counts |
-| LlamaIndex | 3 ReAct steps | Separate budget | Counts | Free extra |
-| Agno | 3 tool-use cycles | 1 budget unit | Counts | Part of flow |
+Counting logic derived from source code analysis at pinned versions (see [PINS.md](PINS.md)).
+Rows upgrade to "executed" as the differential harness validates each prediction.
+
+| Framework | Version | `budget=3` means | Parallel 3 tools | Error retry | Final answer | Tier |
+|-----------|---------|-----------------|------------------|-------------|--------------|------|
+| AutoGen | 0.4.7 | 2 agent turns (user msg eats 1) | 3 budget units | Counts | Counts | executed |
+| OpenAI Agents | 0.22.0 | 3 LLM invocations | 1 budget unit | Counts | Counts | executed |
+| LangChain | 0.3.14 | 3 tool-call cycles | 1 budget unit | Configurable | Free | executed |
+| LangGraph | 1.2.11 | ~1 full iteration (recursion=3) | 1 budget unit | Counts | Counts | executed |
+| CrewAI | 1.15.16 | 3 tool-use cycles | N/A | Free | Free extra call | executed |
+| Google ADK | 1.2.1 | 3 full agent loops | 1 budget unit | Counts | Part of last | modeled |
+| Semantic Kernel | 1.44.1 | 3 auto-invoke attempts | 1 budget unit | Free | Not counted | executed |
+| Anthropic | 0.39.0 | Client-defined | Client decides | Client decides | Client decides | modeled |
+| Swarm | 0.1.0 | Messages in history | 2N budget units | Counts | Counts | archived |
+| LlamaIndex | 0.14.24 | 3 LLM responses | 1 budget unit | Counts | Counts | executed |
+| Agno | 1.2.5 | NOT ENFORCED | N/A | N/A | N/A | executed |
+
+Tier legend: **modeled** = counting logic derived from source code analysis at pinned version.
+**executed** = harness ran against mock LLM, observed values match model.
+**archived** = framework is experimental/not production (OpenAI Swarm).
 
 ## Install
 
@@ -63,7 +72,7 @@ agent-budget-semantics report --output reports/
 
 # Run differential tests against a specific framework
 pip install "agent-budget-semantics[autogen]"
-agent-budget-semantics run --scenario scenarios/s2_budget_exhaustion.yaml --frameworks autogen
+agent-budget-semantics run --scenario scenarios/S2-budget-exhaustion.yaml --frameworks autogen
 
 # Run all frameworks
 pip install "agent-budget-semantics[all]"
@@ -77,10 +86,11 @@ agent-budget-semantics run --all
 ```
 Framework          consumed   utilization   Counting method
 --------------------------------------------------------------------------------
-autogen            7          233%          Each message (LLM response OR tool result)
-openai_agents      4          133%          Each full LLM invocation
 langchain          3          100%          Each tool-use cycle
-langgraph          7          233%          Each graph node execution
+openai_agents      4          133%          Each full LLM invocation
+llamaindex         4          133%          Each LLM response
+autogen            5          167%          Composite messages (1 user + N agent turns)
+langgraph          8          267%          Graph node visits including __start__
 swarm              10         333%          Messages added to history
 ```
 
@@ -130,30 +140,43 @@ See [DIMENSIONS.md](DIMENSIONS.md) for the full taxonomy with per-framework beha
 
 ### S2: Budget Exhaustion (budget=3, 4 LLM calls, 3 tool calls, 478 tokens)
 
-| Framework | budget param | consumed | utilization | exceeded? | counting method |
-|-----------|-------------|----------|-------------|-----------|-----------------|
-| AutoGen | `max_turns` | **7** | 233% | YES | messages (LLM + tool results) |
-| OpenAI Agents | `max_turns` | **4** | 133% | YES | LLM invocations |
-| LangChain | `max_iterations` | 3 | 100% | no | tool-use cycles |
-| LangGraph | `recursion_limit` | **7** | 233% | YES | graph node executions |
-| CrewAI | `max_iter` | 3 | 100% | no | tool-use cycles |
-| Google ADK | `max_iterations` | 3 | 100% | no | full agent loops |
-| Semantic Kernel | `max_auto_invoke` | 3 | 100% | no | auto-invoke rounds |
-| Anthropic | *(client-side)* | **4** | 133% | YES | client-defined |
-| Swarm | `max_turns` | **10** | 333% | YES | all messages in history |
-| LlamaIndex | `max_iterations` | 3 | 100% | no | ReAct steps |
-| Agno | `max_iterations` | 3 | 100% | no | tool-use cycles |
+Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-exhaustion.yaml`.
 
-**Unique `consumed` values: `[3, 4, 7, 10]`** — 4 different answers for identical execution.
+| Framework | budget param | consumed | utilization | exceeded? | counting method | tier |
+|-----------|-------------|----------|-------------|-----------|-----------------|------|
+| AutoGen 0.4.7 | `max_messages` | **5** | 167% | YES | TextMessage + ToolCallSummaryMessage | executed |
+| OpenAI Agents 0.22.0 | `max_turns` | **4** | 133% | YES | LLM invocations | executed |
+| LangChain 0.3.14 | `max_iterations` | 3 | 100% | no | tool-use cycles | executed |
+| LangGraph 1.2.11 | `recursion_limit` | **8** | 267% | YES | graph node visits (incl. __start__) | executed |
+| CrewAI 1.15.16 | `max_iter` | 3 | 100% | no | tool-use cycles | executed |
+| Google ADK 1.2.1 | `max_iterations` | 3 | 100% | no | full agent loops | modeled |
+| Semantic Kernel 1.44.1 | `max_auto_invoke` | 3 | 100% | no | auto-invoke rounds | executed |
+| Anthropic 0.39.0 | *(client-side)* | **4** | 133% | YES | client-defined | modeled |
+| Swarm 0.1.0 | `max_turns` | **10** | 333% | YES | all messages in history | archived |
+| LlamaIndex 0.14.24 | `max_iterations` | **4** | 133% | YES | LLM responses | executed |
+| Agno 1.2.5 | `tool_call_limit` | N/A | N/A | N/A | NOT ENFORCED | executed |
 
-### S4: Parallel Tools (budget=2, 3 parallel tool calls)
+**Unique `consumed` values: `[3, 4, 5, 8, 10]`** — 5 different answers for identical execution.
+Executed results in `results/S2-executed.json`.
 
-| Framework | consumed | Why |
-|-----------|----------|-----|
-| OpenAI Agents | 2 | Batch of 3 tools = 1 turn |
-| LangChain | 3 | Each tool = 1 iteration |
-| AutoGen | 5 | Each tool result = separate message |
-| Swarm | 8 | Each tool = request + result messages |
+### S4: Parallel Tools (3 tools requested in one LLM response)
+
+How many budget units does one parallel batch of 3 tools cost?
+
+| Framework | Batch cost | Why |
+|-----------|-----------|-----|
+| OpenAI Agents | 1 | Batch = 1 turn |
+| LangChain | 1 | Batch = 1 iteration |
+| LangGraph | 1 | Tool node runs once |
+| ADK | 1 | One agent loop |
+| Semantic Kernel | 1 | One auto-invoke round |
+| LlamaIndex | 1 | One ReAct step |
+| Agno | 1 | One cycle |
+| AutoGen | 3 | Each tool result = separate message |
+| CrewAI | N/A | Parallel calls not supported |
+| Swarm | 6 | Each tool = request + result messages (archived) |
+
+Spread among production frameworks: **1 to 3 (3x)**. Including archived Swarm: 1 to 6 (6x).
 
 ### S5: Error/Retry (budget=2, 1 failed + 1 retry)
 
@@ -172,10 +195,11 @@ Same execution, different dashboard:
 |-----------|--------------|-----------|----------------------|
 | LangChain | 6 | root → 4 llm → 1 batch | NO (consumed=3) |
 | OpenAI Agents | 8 | root → 4 llm → 3 tool | YES (consumed=4) |
-| AutoGen | 8 | root → 4 llm → 3 tool | YES (consumed=7) |
+| AutoGen | 8 | root → 4 llm → 3 tool | YES (consumed=5) |
+| LangGraph | 8 | root → 4 llm → 3 tool | YES (consumed=8) |
 | Swarm | 8 | root → 4 llm → 3 tool | YES (consumed=10) |
 
-An alert threshold of `consumed > 3` fires for 7/11 frameworks but not 4/11. Same work. Same tokens. Your monitoring is framework-dependent.
+An alert threshold of `consumed > 3` fires for 5/11 frameworks but not 6/11. Same work. Same tokens. Your monitoring is framework-dependent.
 
 ## Use in CI
 

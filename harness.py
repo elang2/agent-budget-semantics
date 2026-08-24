@@ -8,8 +8,8 @@ Orchestrates:
 4. Produce the divergence matrix
 
 Usage:
-    python harness.py --scenario scenarios/s2_budget_exhaustion.yaml
-    python harness.py --scenario scenarios/s2_budget_exhaustion.yaml --frameworks autogen,adk
+    python harness.py --scenario scenarios/S2-budget-exhaustion.yaml
+    python harness.py --scenario scenarios/S2-budget-exhaustion.yaml --frameworks autogen,adk
     python harness.py --all
 """
 
@@ -27,6 +27,31 @@ import httpx
 import yaml
 
 from runners.base import RunResult
+
+FRAMEWORK_PACKAGES = {
+    "autogen": "autogen-agentchat",
+    "openai_agents": "openai-agents",
+    "langchain": "langchain",
+    "langgraph": "langgraph",
+    "crewai": "crewai",
+    "adk": "google-adk",
+    "semantic_kernel": "semantic-kernel",
+    "anthropic": "anthropic",
+    "swarm": "openai-swarm",
+    "llamaindex": "llama-index-core",
+    "agno": "agno",
+}
+
+
+def get_framework_version(framework: str) -> str:
+    pkg = FRAMEWORK_PACKAGES.get(framework)
+    if not pkg:
+        return "unknown"
+    try:
+        from importlib.metadata import version
+        return version(pkg)
+    except Exception:
+        return "not-installed"
 
 RUNNERS = {
     "autogen": "runners.runner_autogen",
@@ -107,6 +132,7 @@ async def run_scenario(scenario_path: str, frameworks: list[str]) -> list[dict]:
 
             comparison = {
                 "framework": framework,
+                "framework_version": get_framework_version(framework),
                 "scenario": scenario["name"],
                 "budget_param": result.budget_param,
                 "budget_value": budget_value,
@@ -198,7 +224,7 @@ async def main():
     scenarios = []
     if args.all:
         scenario_dir = Path("scenarios")
-        scenarios = sorted(scenario_dir.glob("s*.yaml"))
+        scenarios = sorted(scenario_dir.glob("S*.yaml"))
     elif args.scenario:
         scenarios = [Path(args.scenario)]
     else:

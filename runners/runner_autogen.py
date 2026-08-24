@@ -1,8 +1,13 @@
 """
 AutoGen (v0.4+) budget enforcement runner.
 
-Budget primitive: max_turns on AgentChat.run() / run_stream()
-What it counts: Each LLM response OR tool result message counts as one "turn"
+Budget primitive: MaxMessageTermination(max_messages=N) on RoundRobinGroupChat
+What it counts: TextMessage + ToolCallSummaryMessage (NOT individual events)
+
+Observed behavior (v0.4.7):
+  max_messages=N counts composite "messages": the initial user TextMessage (1)
+  plus each ToolCallSummaryMessage (1 per agent turn, regardless of how many
+  tools that turn executed). So budget=N allows N-1 agent turns.
 """
 
 import asyncio
@@ -33,13 +38,13 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
 
     tool_calls_observed = 0
 
-    def weather_tool(city: str) -> str:
+    def get_weather(city: str) -> str:
         """Get weather for a city."""
         nonlocal tool_calls_observed
         tool_calls_observed += 1
         return default_tool_handler("get_weather", json.dumps({"city": city}))
 
-    def calculate_tool(expression: str) -> str:
+    def calculate(expression: str) -> str:
         """Perform arithmetic."""
         nonlocal tool_calls_observed
         tool_calls_observed += 1
@@ -48,14 +53,21 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     tools = []
     for td in scenario.get("tool_definitions", []):
         if td["name"] == "get_weather":
-            tools.append(weather_tool)
+            tools.append(get_weather)
         elif td["name"] == "calculate":
-            tools.append(calculate_tool)
+            tools.append(calculate)
 
     model_client = OpenAIChatCompletionClient(
         model="mock-budget-llm",
         base_url=mock_url + "/v1",
         api_key="mock-key",
+        model_info={
+            "vision": False,
+            "function_calling": True,
+            "json_output": True,
+            "family": "unknown",
+            "structured_output": False,
+        },
     )
 
     agent = AssistantAgent(
@@ -73,14 +85,23 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
 
     llm_calls = 0
     stopped_by = "natural"
+    framework_message_count = 0
 
     try:
         result = await team.run(task="Check the weather in various cities.")
 
         for msg in result.messages:
             msg_type = type(msg).__name__
-            if msg_type in ("AssistantMessage", "ModelClientStreamingChunkEvent"):
+            if msg_type == "ToolCallRequestEvent":
                 llm_calls += 1
+            elif msg_type == "TextMessage":
+                source = getattr(msg, "source", "")
+                if source != "user":
+                    llm_calls += 1
+
+        text_msgs = sum(1 for m in result.messages if type(m).__name__ == "TextMessage")
+        summary_msgs = sum(1 for m in result.messages if type(m).__name__ == "ToolCallSummaryMessage")
+        framework_message_count = text_msgs + summary_msgs
 
         if hasattr(result, 'stop_reason') and result.stop_reason:
             if "maximum" in str(result.stop_reason).lower():
@@ -90,7 +111,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         return RunResult(
             framework="autogen",
             scenario=scenario["name"],
-            budget_param="max_turns",
+            budget_param="max_messages",
             budget_value=budget_value,
             actual_llm_calls=llm_calls,
             actual_tool_calls=tool_calls_observed,
@@ -103,9 +124,10 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     return RunResult(
         framework="autogen",
         scenario=scenario["name"],
-        budget_param="max_turns",
+        budget_param="max_messages",
         budget_value=budget_value,
         actual_llm_calls=llm_calls,
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
+        framework_iteration_count=framework_message_count,
     )

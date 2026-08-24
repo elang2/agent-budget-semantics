@@ -1,0 +1,54 @@
+scenario: S5 - Error/Retry
+description: |
+  Expected behavior when a tool call fails and the framework retries,
+  with budget=2.
+
+  Key question: does a failed+retried tool call consume budget or is it free?
+
+validated: 2026-08-23
+framework_versions:
+  autogen: "0.4.7"
+  langgraph: "0.3.21"
+  crewai: "0.108.0"
+  semantic_kernel: "1.17.1"
+
+expectations:
+  autogen:
+    budget_param: max_turns
+    budget_value: 2
+    expected_consumed: 2
+    rationale: "Failed tool result is still a message, counts against budget"
+
+  langgraph:
+    budget_param: recursion_limit
+    budget_value: 4
+    expected_consumed: 2
+    rationale: "Error handler node execution counts toward recursion limit"
+
+  crewai:
+    budget_param: max_iter
+    budget_value: 2
+    expected_consumed: 1
+    rationale: "Failed tool calls do not count; only successful completions iterate"
+
+  semantic_kernel:
+    budget_param: maximum_auto_invoke_attempts
+    budget_value: 2
+    expected_consumed: 1
+    rationale: "Retries are internal to the auto-invoke mechanism, not counted separately"
+
+dimensions_to_observe:
+  D9_retry_counting:
+    question: "Does a failed+retried call consume budget?"
+    possible_values:
+      - "yes_counts"
+      - "no_free_retry"
+      - "configurable"
+
+  D10_error_escalation:
+    question: "What happens if all retries fail and budget is consumed?"
+    possible_values:
+      - "raise_exception"
+      - "return_error_as_result"
+      - "skip_tool_continue"
+      - "terminate_agent"

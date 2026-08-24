@@ -82,7 +82,9 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         verbose=False,
     )
 
-    llm_calls = 0
+    import httpx
+    httpx.post(f"{mock_url}/reset")
+
     stopped_by = "natural"
 
     try:
@@ -96,23 +98,28 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         if "max_iter" in error_msg.lower() or "iteration" in error_msg.lower():
             stopped_by = "budget"
         else:
+            ledger = httpx.get(f"{mock_url}/ledger").json()
+            ledger_entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
             return RunResult(
                 framework="crewai",
                 scenario=scenario["name"],
                 budget_param="max_iter",
                 budget_value=budget_value,
-                actual_llm_calls=llm_calls,
+                actual_llm_calls=len(ledger_entries),
                 actual_tool_calls=tool_calls_observed,
                 stopped_by="error",
                 error=error_msg,
             )
+
+    ledger = httpx.get(f"{mock_url}/ledger").json()
+    ledger_entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
 
     return RunResult(
         framework="crewai",
         scenario=scenario["name"],
         budget_param="max_iter",
         budget_value=budget_value,
-        actual_llm_calls=llm_calls,
+        actual_llm_calls=len(ledger_entries),
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
     )

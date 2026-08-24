@@ -84,8 +84,9 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
 
     except Exception as e:
         error_msg = str(e)
-        if "max_turns" in error_msg.lower() or "MaxTurns" in error_msg:
+        if "max turns" in error_msg.lower() or "exceeded" in error_msg.lower():
             stopped_by = "budget"
+            llm_calls = budget_value
         else:
             return RunResult(
                 framework="openai_agents",

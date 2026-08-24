@@ -1,0 +1,91 @@
+scenario: S4 - Parallel Tools
+description: |
+  How many budget units does one batch of N parallel tool calls cost?
+
+  Key finding: 6 frameworks count a parallel batch as 1 unit, AutoGen
+  counts N (one per tool result message), Swarm counts 2N (request +
+  result per tool). CrewAI does not support parallel tool calls.
+
+  At N=3: spread is 1 to 3 among production frameworks (3x).
+  Including archived Swarm: 1 to 6 (6x).
+
+validated: 2026-08-23
+framework_versions:
+  openai_agents: "0.1.1"
+  langchain: "0.3.14"
+  langgraph: "0.3.21"
+  autogen: "0.4.7"
+  crewai: "0.108.0"
+  adk: "1.2.1"
+  semantic_kernel: "1.17.1"
+  llamaindex: "0.11.23"
+  agno: "1.2.5"
+  swarm: "0.1.0"
+
+expectations:
+  openai_agents:
+    budget_param: max_turns
+    parallel_batch_cost: 1
+    rationale: "Batch of N parallel tools = 1 turn (the LLM call that requested them)"
+
+  langchain:
+    budget_param: max_iterations
+    parallel_batch_cost: 1
+    rationale: "Batch = 1 iteration (one action-observation cycle)"
+
+  langgraph:
+    budget_param: recursion_limit
+    parallel_batch_cost: 1
+    rationale: "Tool execution node runs once regardless of tool count"
+
+  autogen:
+    budget_param: max_turns
+    parallel_batch_cost: 3
+    rationale: "Each tool result is a separate message in the group chat"
+
+  crewai:
+    budget_param: max_iter
+    parallel_batch_cost: "N/A"
+    rationale: "CrewAI does not support parallel tool calls"
+
+  adk:
+    budget_param: max_iterations
+    parallel_batch_cost: 1
+    rationale: "Parallel tools execute within one agent loop iteration"
+
+  semantic_kernel:
+    budget_param: maximum_auto_invoke_attempts
+    parallel_batch_cost: 1
+    rationale: "One auto-invoke round handles all parallel tool calls"
+
+  llamaindex:
+    budget_param: max_iterations
+    parallel_batch_cost: 1
+    rationale: "One ReAct step covers the full tool batch"
+
+  agno:
+    budget_param: max_iterations
+    parallel_batch_cost: 1
+    rationale: "Parallel tools execute within one cycle"
+
+  swarm:
+    budget_param: max_turns
+    parallel_batch_cost: 6
+    rationale: "Each tool = request message + result message = 2 messages, times N=3"
+    tier: archived
+
+dimensions_to_observe:
+  D7_parallel_counting:
+    question: "How are N parallel tool calls counted against budget?"
+    values:
+      batch_as_one: ["openai_agents", "langchain", "langgraph", "adk", "semantic_kernel", "llamaindex", "agno"]
+      each_tool_separate: ["autogen"]
+      each_message_separate: ["swarm"]
+      not_supported: ["crewai"]
+
+  D8_parallel_enforcement:
+    question: "Can budget fire mid-batch (killing remaining parallel calls)?"
+    possible_values:
+      - "no_atomic_batch"
+      - "yes_partial_batch"
+      - "framework_dependent"

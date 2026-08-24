@@ -1,14 +1,14 @@
 """
 LlamaIndex agent budget enforcement runner.
 
-Budget primitive: max_iterations on AgentRunner/ReActAgent
-What it counts: Each reasoning step (thought + action + observation = 1 iteration)
-Unique: Has early_stopping_method='generate' that gives one extra LLM call to
-summarize when budget is hit. Same concept as LangChain's AgentExecutor but
-with a different default behavior.
-
-Also has max_function_calls as a separate budget for total tool invocations
-across all iterations (parallel tool calls in one step count individually).
+Budget primitive: max_iterations on .run() (v0.14.24+)
+What it counts: Each LLM response (parse_agent_output calls)
+Observed behavior (v0.14.24):
+  num_iterations increments on EVERY parse_agent_output call, regardless of
+  whether the response contains tool_calls or not. The counter fires BEFORE
+  tool dispatch, so on the Nth iteration tools are never executed.
+  budget=N → N LLM calls, N-1 tool executions (when all N responses have tools).
+  Consumed = llm_calls (same semantics as OpenAI Agents SDK).
 """
 
 import json
@@ -20,7 +20,7 @@ from .base import RunResult, default_tool_handler
 async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     """Run scenario through LlamaIndex ReActAgent with max_iterations."""
     try:
-        from llama_index.core.agent import ReActAgent
+        from llama_index.core.agent.workflow import FunctionAgent
         from llama_index.core.tools import FunctionTool
         from llama_index.llms.openai import OpenAI as LlamaOpenAI
     except ImportError as e:
@@ -57,22 +57,29 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             tools.append(FunctionTool.from_defaults(fn=calculate))
 
     llm = LlamaOpenAI(
-        model="mock-budget-llm",
+        model="gpt-4o",
         api_base=mock_url + "/v1",
         api_key="mock-key",
     )
 
-    agent = ReActAgent.from_tools(
+    agent = FunctionAgent(
         tools=tools,
         llm=llm,
-        max_iterations=budget_value,
-        verbose=False,
+        streaming=False,
+        early_stopping_method="force",
     )
 
-    try:
-        response = await agent.achat("Perform the requested task.")
+    import httpx
 
-        import httpx
+    try:
+        httpx.post(f"{mock_url}/reset")
+
+        handler = agent.run(
+            user_msg="Perform the requested task.",
+            max_iterations=budget_value,
+        )
+        response = await handler
+
         ledger = httpx.get(f"{mock_url}/ledger").json()
         ledger_entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
 
@@ -83,23 +90,28 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             budget_value=budget_value,
             actual_llm_calls=len(ledger_entries),
             actual_tool_calls=tool_calls_observed,
-            stopped_by="completed" if str(response) else "empty",
+            stopped_by="completed" if response else "empty",
             metadata={
-                "note": "LlamaIndex ReAct counts thought+action+observation as 1 iteration. "
-                       "The Thought LLM call and Action execution are part of the same step. "
-                       "Different from LangGraph where each is a separate node visit.",
-                "has_max_function_calls": True,
+                "note": "LlamaIndex 0.14.24 counts each LLM response as 1 iteration "
+                       "(same as OpenAI Agents). budget=N → N LLM calls, N-1 tool "
+                       "executions. Counter fires before tool dispatch on Nth iteration.",
             },
         )
 
     except Exception as e:
+        error_str = str(e)
+        stopped_by = "budget_exceeded" if "max iterations" in error_str.lower() else "error"
+
+        ledger = httpx.get(f"{mock_url}/ledger").json()
+        ledger_entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
+
         return RunResult(
             framework="llamaindex",
             scenario=scenario["name"],
             budget_param="max_iterations",
             budget_value=budget_value,
-            actual_llm_calls=0,
+            actual_llm_calls=len(ledger_entries),
             actual_tool_calls=tool_calls_observed,
-            stopped_by="error",
-            error=f"{type(e).__name__}: {str(e)[:200]}",
+            stopped_by=stopped_by,
+            error=f"{type(e).__name__}: {error_str[:200]}",
         )

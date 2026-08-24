@@ -1,8 +1,13 @@
 """
 Google ADK budget enforcement runner.
 
-Budget primitive: max_iterations on Runner or Agent config
+Budget primitive: LoopAgent(max_iterations=N)
 What it counts: Each full agent loop iteration (LLM call + optional tool execution)
+
+Note: ADK has two budget primitives with different scopes:
+  - LoopAgent(max_iterations=N): per-agent loop cap (what we test here)
+  - RunConfig(max_llm_calls=N): runner-wide cap across all sub-agents (excluded
+    from OTel iteration_budget.limit because it spans multiple agents)
 """
 
 import asyncio
@@ -13,9 +18,9 @@ from .base import RunResult, default_tool_handler
 
 
 async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
-    """Run scenario through Google ADK with max_iterations budget."""
+    """Run scenario through Google ADK with LoopAgent max_iterations budget."""
     try:
-        from google.adk.agents import Agent
+        from google.adk.agents import Agent, LoopAgent
         from google.adk.runners import Runner
         from google.adk.sessions import InMemorySessionService
         from google.genai import types as genai_types
@@ -52,16 +57,22 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         elif td["name"] == "calculate":
             tools.append(calculate)
 
-    agent = Agent(
+    inner_agent = Agent(
         name="budget_test_agent",
         model="mock-budget-llm",
         instruction="You are a helpful assistant. Use tools as needed.",
         tools=tools,
     )
 
+    loop_agent = LoopAgent(
+        name="budget_loop",
+        sub_agents=[inner_agent],
+        max_iterations=budget_value,
+    )
+
     session_service = InMemorySessionService()
     runner = Runner(
-        agent=agent,
+        agent=loop_agent,
         app_name="budget_test",
         session_service=session_service,
     )
@@ -84,7 +95,6 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             user_id="test_user",
             session_id=session.id,
             new_message=user_message,
-            max_iterations=budget_value,
         ):
             if hasattr(event, 'content') and event.content:
                 if event.content.role == "model":

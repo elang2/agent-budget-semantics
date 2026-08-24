@@ -55,10 +55,22 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         elif td["name"] == "calculate":
             tools.append(calculate)
 
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    class LLMCounter(BaseCallbackHandler):
+        def __init__(self):
+            self.count = 0
+        def on_llm_start(self, *args, **kwargs):
+            self.count += 1
+
+    counter = LLMCounter()
+
     llm = ChatOpenAI(
         model="mock-budget-llm",
         base_url=mock_url + "/v1",
         api_key="mock-key",
+        disable_streaming=True,
+        callbacks=[counter],
     )
 
     prompt = ChatPromptTemplate.from_messages([
@@ -75,7 +87,6 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         verbose=False,
     )
 
-    llm_calls = 0
     stopped_by = "natural"
 
     try:
@@ -94,7 +105,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
                 scenario=scenario["name"],
                 budget_param="max_iterations",
                 budget_value=budget_value,
-                actual_llm_calls=llm_calls,
+                actual_llm_calls=counter.count,
                 actual_tool_calls=tool_calls_observed,
                 stopped_by="error",
                 error=error_msg,
@@ -105,7 +116,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         scenario=scenario["name"],
         budget_param="max_iterations",
         budget_value=budget_value,
-        actual_llm_calls=llm_calls,
+        actual_llm_calls=counter.count,
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
     )

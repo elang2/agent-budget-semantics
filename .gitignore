@@ -12,5 +12,6 @@ env/
 .pytest_cache/
 .mypy_cache/
 results/*.json
+!results/S2-executed.json
 .DS_Store
 .env

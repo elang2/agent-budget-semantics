@@ -66,7 +66,8 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     agent = Agent(
         model=model,
         tools=tools_list,
-        max_iterations=budget_value,
+        tool_call_limit=budget_value,
+        reasoning_max_steps=budget_value,
         show_tool_calls=False,
     )
 

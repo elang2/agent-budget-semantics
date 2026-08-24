@@ -1,18 +1,23 @@
 """
-OTel Budget Telemetry Comparison
+OTel Budget Telemetry Comparison — PREDICTION MODEL
 
-Shows what each framework WOULD report for the same execution using
-proposed OTel GenAI semantic conventions from PR #439.
+This module contains a SOURCE-CODE-DERIVED MODEL of how each framework
+counts budget iterations. It is NOT measurement data.
 
-This is the key evidence: same scenario, same mock LLM, same tokens consumed,
-but each framework would emit different values for the same OTel attributes.
+The _calculate_consumed() formula encodes predictions based on reading
+each framework's source code. These predictions serve as the EXPECTED
+values against which the differential harness validates.
 
-Proposed attributes (from open-telemetry/semantic-conventions-genai#439):
+Provenance: "modeled" — derived from documentation and source code analysis.
+To produce "executed" provenance, run the harness against the mock LLM:
+    python harness.py --scenario scenarios/S2-budget-exhaustion.yaml --frameworks <name>
+
+When harness results exist in results/, report_generator.py prefers them
+over this model. When they don't, results are labeled "modeled."
+
+Proposed OTel attributes (from open-telemetry/semantic-conventions-genai#439):
   gen_ai.agent.iteration_budget.limit    - configured maximum iterations
   gen_ai.agent.iteration_budget.consumed - iterations used
-  gen_ai.agent.token_budget.limit        - configured maximum tokens
-  gen_ai.agent.token_budget.consumed     - tokens used
-  gen_ai.invoke_agent.token_budget.utilization - ratio (consumed/limit)
 """
 
 import json
@@ -21,9 +26,9 @@ from pathlib import Path
 
 FRAMEWORK_BUDGET_SEMANTICS = {
     "autogen": {
-        "budget_param": "max_turns",
-        "iteration_definition": "Each message (LLM response OR tool result) in the group chat",
-        "what_counts": "assistant_message + tool_result_message",
+        "budget_param": "max_messages",
+        "iteration_definition": "Composite messages (1 user + N agent turns)",
+        "what_counts": "TextMessage + ToolCallSummaryMessage (not individual events)",
         "parallel_tools": "Each tool result is a separate message = separate turn",
         "final_answer": "Counts as a turn",
         "token_budget": "Not natively enforced (callback-based)",
@@ -46,8 +51,8 @@ FRAMEWORK_BUDGET_SEMANTICS = {
     },
     "langgraph": {
         "budget_param": "recursion_limit",
-        "iteration_definition": "Each graph node execution",
-        "what_counts": "Node visits (agent node + tool node = 2 per iteration)",
+        "iteration_definition": "Graph node visits including __start__ (2 nodes per iteration)",
+        "what_counts": "__start__(1) + agent_node(1) + tool_node(1) per iteration",
         "parallel_tools": "Tool node processes all parallel calls as 1 visit",
         "final_answer": "Counts as a node visit",
         "token_budget": "Not enforced",
@@ -94,10 +99,10 @@ FRAMEWORK_BUDGET_SEMANTICS = {
     },
     "llamaindex": {
         "budget_param": "max_iterations",
-        "iteration_definition": "Each ReAct step (Thought + Action + Observation)",
-        "what_counts": "Complete reasoning steps; partial steps don't count",
-        "parallel_tools": "Counted individually via max_function_calls (separate budget!)",
-        "final_answer": "Gets one extra call via early_stopping_method='generate'",
+        "iteration_definition": "Each LLM response (parse_agent_output calls)",
+        "what_counts": "Every LLM response increments counter (tool-calling and final alike)",
+        "parallel_tools": "Batch = 1 iteration (one LLM response)",
+        "final_answer": "Counts as an iteration",
         "token_budget": "Not enforced natively",
     },
     "agno": {
@@ -137,15 +142,26 @@ def simulate_otel_attributes(scenario_name: str, llm_calls: int, tool_calls: int
 
 
 def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
-    """Estimate what each framework would report as iterations consumed."""
+    """Predict what each framework would report as iterations consumed.
+
+    VALIDATED against mock LLM execution (2026-08-23):
+      autogen: CORRECTED (was llm+tool, actual is 1+llm_calls)
+      openai_agents: CONFIRMED (llm_calls)
+      langchain: CONFIRMED (tool_calls)
+      langgraph: CORRECTED (was llm+tool, actual includes __start__ node)
+      semantic_kernel: CONFIRMED (tool_calls = auto-invoke rounds)
+      crewai: CONFIRMED (tool_calls = tool-use cycles)
+      llamaindex: CORRECTED (was tool_calls, actual is llm_calls)
+      agno: INVALID (budget not enforced in v1.2.5)
+    """
     if framework == "autogen":
-        return llm_calls + tool_calls
+        return 1 + llm_calls
     elif framework == "openai_agents":
         return llm_calls
     elif framework == "langchain":
         return tool_calls
     elif framework == "langgraph":
-        return llm_calls + tool_calls
+        return 1 + llm_calls + tool_calls
     elif framework == "crewai":
         return tool_calls
     elif framework == "adk":
@@ -157,7 +173,7 @@ def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
     elif framework == "swarm":
         return llm_calls + (tool_calls * 2)
     elif framework == "llamaindex":
-        return tool_calls
+        return llm_calls
     elif framework == "agno":
         return tool_calls
     return llm_calls
