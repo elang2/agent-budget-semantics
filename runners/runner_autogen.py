@@ -119,7 +119,8 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             error=str(e),
         )
     finally:
-        await model_client.close()
+        if hasattr(model_client, 'close'):
+            await model_client.close()
 
     return RunResult(
         framework="autogen",

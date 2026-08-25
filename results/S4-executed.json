@@ -1,0 +1,68 @@
+{
+  "scenario": "S4-parallel-tools",
+  "executed_at": "2026-08-24",
+  "mock_server": "mock-llm/server.py with S4 script (3 parallel tool calls in one LLM response)",
+  "provenance": "executed",
+  "schema": {
+    "consumed_at_ground_truth": "How many budget units would be consumed if this framework processed 2 LLM calls with 3 parallel tool requests in the first call.",
+    "predicted_consumed": "Source-code-derived prediction before execution.",
+    "matched": "consumed_at_ground_truth == predicted_consumed",
+    "batch_counting": "Whether parallel tools count as 1 unit (batch) or N units (per-tool)"
+  },
+  "ground_truth": {
+    "description": "2 LLM calls: first requests 3 parallel tools, second produces final answer",
+    "llm_calls": 2,
+    "parallel_tool_calls": 3,
+    "budget_limit": 2
+  },
+  "frameworks": {
+    "langchain": {
+      "version": "0.3.14",
+      "budget_param": "max_iterations",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 3,
+      "predicted_consumed": 1,
+      "matched": false,
+      "batch_counting": "batch_as_one",
+      "actual_llm_calls": 3,
+      "stopped_by": "budget",
+      "notes": "Stopped at budget=3. Expected parallel batch to count as 1, but consumed 3."
+    },
+    "langgraph": {
+      "version": "1.2.11",
+      "budget_param": "recursion_limit",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 1,
+      "predicted_consumed": 1,
+      "matched": true,
+      "batch_counting": "batch_as_one",
+      "actual_llm_calls": 1,
+      "stopped_by": "natural",
+      "notes": "Completed naturally with 1 LLM call. Parallel batch counted as 1 unit."
+    },
+    "semantic_kernel": {
+      "version": "1.44.1",
+      "budget_param": "maximum_auto_invoke_attempts",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 4,
+      "predicted_consumed": 1,
+      "matched": false,
+      "batch_counting": "batch_as_one",
+      "actual_llm_calls": 4,
+      "stopped_by": "completed",
+      "notes": "Completed with 4 LLM calls despite budget=2. Free final answer + parallel batch behavior."
+    },
+    "autogen": {
+      "version": "0.4.7",
+      "budget_param": "max_messages",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 2,
+      "predicted_consumed": 3,
+      "matched": false,
+      "batch_counting": "each_tool_separate",
+      "actual_llm_calls": 2,
+      "stopped_by": "budget",
+      "notes": "Stopped at budget=2. Expected N messages for N tools, but batched."
+    }
+  }
+}

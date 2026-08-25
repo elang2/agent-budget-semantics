@@ -1,0 +1,69 @@
+{
+  "scenario": "S5-error-retry",
+  "executed_at": "2026-08-24",
+  "mock_server": "mock-llm/server.py with S5 script (tool fails, agent retries successfully)",
+  "provenance": "executed",
+  "schema": {
+    "consumed_at_ground_truth": "How many budget units consumed for: failed tool call + retry + final answer.",
+    "predicted_consumed": "Source-code-derived prediction before execution.",
+    "matched": "consumed_at_ground_truth == predicted_consumed",
+    "retry_counting": "Whether retries count against budget or are free"
+  },
+  "ground_truth": {
+    "description": "Tool call fails, agent retries successfully, then produces final answer",
+    "llm_calls_with_retry": 3,
+    "failed_calls": 1,
+    "successful_calls": 2,
+    "budget_limit": 2
+  },
+  "frameworks": {
+    "autogen": {
+      "version": "0.4.7",
+      "budget_param": "max_messages",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 3,
+      "predicted_consumed": 2,
+      "matched": false,
+      "retry_counting": "retry_counts",
+      "actual_llm_calls": 3,
+      "stopped_by": "budget",
+      "notes": "Stopped at budget after 3 LLM calls (failed + retry + final). Retry counted against budget."
+    },
+    "langgraph": {
+      "version": "1.2.11",
+      "budget_param": "recursion_limit",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 1,
+      "predicted_consumed": 2,
+      "matched": false,
+      "retry_counting": "unclear",
+      "actual_llm_calls": 1,
+      "stopped_by": "natural",
+      "notes": "Completed with 1 LLM call. Unexpected - may have handled error differently than scenario assumed."
+    },
+    "semantic_kernel": {
+      "version": "1.44.1",
+      "budget_param": "maximum_auto_invoke_attempts",
+      "budget_value": 2,
+      "consumed_at_ground_truth": 4,
+      "predicted_consumed": 1,
+      "matched": false,
+      "retry_counting": "retry_free",
+      "actual_llm_calls": 4,
+      "stopped_by": "completed",
+      "notes": "Completed with 4 LLM calls. Retries appear to be free (not counted)."
+    },
+    "langchain": {
+      "version": "0.3.14",
+      "budget_param": "max_iterations",
+      "budget_value": 2,
+      "consumed_at_ground_truth": null,
+      "predicted_consumed": 1,
+      "matched": false,
+      "retry_counting": "error",
+      "actual_llm_calls": 0,
+      "stopped_by": "error",
+      "notes": "Encountered error during execution. Scenario may not be compatible with LangChain error handling."
+    }
+  }
+}

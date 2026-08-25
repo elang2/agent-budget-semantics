@@ -161,35 +161,40 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 **Unique `consumed` values: `[3, 4, 5, 8, 10]`** — 5 different answers for identical execution.
 Executed results in `results/S2-executed.json`.
 
-### S4: Parallel Tools (3 tools requested in one LLM response) — modeled
+### S4: Parallel Tools (3 tools requested in one LLM response) — executed
 
-How many budget units does one parallel batch of 3 tools cost? (Source-code analysis; not yet executed by harness.)
+How many budget units does one parallel batch of 3 tools cost? Executed with 4 frameworks.
 
-| Framework | Batch cost | Why |
-|-----------|-----------|-----|
-| OpenAI Agents | 1 | Batch = 1 turn |
-| LangChain | 1 | Batch = 1 iteration |
-| LangGraph | 1 | Tool node runs once |
-| ADK | 1 | One agent loop |
-| Semantic Kernel | 1 | One auto-invoke round |
-| LlamaIndex | 1 | One ReAct step |
-| Agno | 1 | One cycle |
-| AutoGen | 3 | Each tool result = separate message |
-| CrewAI | N/A | Parallel calls not supported |
+| Framework | Batch cost | Status | Why |
+|-----------|-----------|--------|-----|
+| LangChain | 3† | executed | Budget stopped at 3 (unexpected - predicted 1) |
+| LangGraph | 1 | executed | Tool node runs once, batch = 1 unit |
+| Semantic Kernel | 4† | executed | Completed with 4 calls (free final answer) |
+| AutoGen | 2 | executed | Stopped at budget=2 (predicted 3) |
+| OpenAI Agents | 1 | modeled | Batch = 1 turn (not executed) |
+| ADK | 1 | modeled | One agent loop (not executed) |
+| LlamaIndex | 1 | modeled | One ReAct step (not executed) |
+| Agno | 1 | modeled | One cycle (not executed) |
+| CrewAI | N/A | error | Parallel calls validation error |
+
+†Unexpected results requiring investigation. Executed results in `results/S4-executed.json`.
 | Swarm | 6 | Each tool = request + result messages (archived) |
 
 Spread among production frameworks: **1 to 3 (3x)**. Including archived Swarm: 1 to 6 (6x).
 
-### S5: Error/Retry (budget=2, 1 failed + 1 retry) — modeled
+### S5: Error/Retry (budget=2, 1 failed + 1 retry) — executed
 
-(Source-code analysis; not yet executed by harness.)
+Executed with 4 frameworks showing whether retries count against budget.
 
-| Framework | Retry counts? | consumed |
-|-----------|--------------|----------|
-| AutoGen | Yes | 2 (no budget left for useful work) |
-| LangGraph | Yes | 2 |
-| CrewAI | No | 1 (full budget for useful work) |
-| Semantic Kernel | No | 1 |
+| Framework | Retry counts? | consumed | Status |
+|-----------|--------------|----------|--------|
+| AutoGen | Yes | 3 | executed - Stopped at budget after retry |
+| Semantic Kernel | No | 4 | executed - Completed (retry free) |
+| LangGraph | Unclear | 1 | executed - Unexpected single call |
+| LangChain | Error | 0 | executed - Scenario error |
+| CrewAI | No | 1 | modeled - Full budget for useful work |
+
+Executed results in `results/S5-executed.json`.
 
 ### OTel Telemetry Impact
 
