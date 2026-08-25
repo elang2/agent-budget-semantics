@@ -114,7 +114,7 @@ Annual spread: $97,200 — from iteration counting alone.
 ```
 Framework        Spans   consumed   util%    Structure
 ------------------------------------------------------------------------------------------
-autogen          8       7          233%     root → 4 llm → 3 tool
+autogen          8       5          167%     root → 4 llm → 3 tool
 langchain        6       3          100%     root → 4 llm → 1 batch
 swarm            8       10         333%     root → 4 llm → 3 tool
 ```
@@ -161,9 +161,9 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 **Unique `consumed` values: `[3, 4, 5, 8, 10]`** — 5 different answers for identical execution.
 Executed results in `results/S2-executed.json`.
 
-### S4: Parallel Tools (3 tools requested in one LLM response)
+### S4: Parallel Tools (3 tools requested in one LLM response) — modeled
 
-How many budget units does one parallel batch of 3 tools cost?
+How many budget units does one parallel batch of 3 tools cost? (Source-code analysis; not yet executed by harness.)
 
 | Framework | Batch cost | Why |
 |-----------|-----------|-----|
@@ -180,7 +180,9 @@ How many budget units does one parallel batch of 3 tools cost?
 
 Spread among production frameworks: **1 to 3 (3x)**. Including archived Swarm: 1 to 6 (6x).
 
-### S5: Error/Retry (budget=2, 1 failed + 1 retry)
+### S5: Error/Retry (budget=2, 1 failed + 1 retry) — modeled
+
+(Source-code analysis; not yet executed by harness.)
 
 | Framework | Retry counts? | consumed |
 |-----------|--------------|----------|

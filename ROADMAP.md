@@ -49,10 +49,12 @@ After S4/S5 execution, the "Parallel 3 tools" and "Error retry" columns earn the
 
 ### 2a. S6: Enforcement verification suite
 
-The question regulators ask: "does the limit actually stop the agent?" Three findings already in hand:
+The question regulators ask: "does the limit actually stop the agent?" Two executed findings already in hand:
 - Agno: enforcement fires, loop ignores it (9 calls past limit of 3)
-- Swarm: 333% exceedance before termination
 - Semantic Kernel: counter=3 at budget=3, but 4 LLM calls executed (undocumented free final-answer call)
+
+One modeled finding (from source-code analysis, not yet executed):
+- Swarm: 333% exceedance before termination
 
 Generalize into: every limit type (iterations, tokens, time, cost) x does-it-actually-stop x can-it-be-evaded. The procurement language already exists in military governance literature: "verify budget enforcement cannot be bypassed."
 
@@ -88,7 +90,7 @@ hermes-agent #414 is designing budget-pressure warnings. "Does the framework war
 
 ### 4a. Agent Contracts (arXiv 2601.08815)
 
-Their Table 1 compares governance features across 8 frameworks from documentation. Our tool proves that method is wrong 50% of the time. Offer executed validation of their table. Opens citation channel into formal-methods community.
+Their Table 1 compares governance features across 8 frameworks from documentation. Our tool shows that even source-code analysis (a more rigorous method than documentation) is wrong 50% of the time — documentation-only analysis is presumably at least as fragile. Offer executed validation of their table. Opens citation channel into formal-methods community.
 
 ### 4b. "When Agents Do Not Stop" (arXiv 2607.01641)
 
