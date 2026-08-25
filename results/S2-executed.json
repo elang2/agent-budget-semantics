@@ -7,7 +7,8 @@
     "consumed_at_ground_truth": "What gen_ai.agent.iteration_budget.consumed would read if this framework ran 4 LLM calls and 3 tool calls to completion. This is the OTel comparison value.",
     "counter_at_budget_stop": "The framework's internal counter value at the moment budget enforcement fired. For most frameworks this equals budget_value (tautological), but confirms the counter is working.",
     "predicted_consumed": "What _calculate_consumed() predicted BEFORE execution (the original source-code model).",
-    "matched": "consumed_at_ground_truth == predicted_consumed. Computed, never typed.",
+    "matched": "consumed_at_ground_truth == predicted_consumed. Computed, never typed. This is the canonical definition (prediction_matched_at_ground_truth). The same 50% accuracy holds if compared at budget_stop, but the set of correct predictions differs.",
+    "matched_definition": "prediction_matched_at_ground_truth",
     "unit_observed": "What the counter actually counts. Enum: llm_invocations | tool_cycles | composite_messages | graph_nodes | auto_invoke_rounds. Null if not enforced.",
     "enforced": "Whether budget_value actually stopped the agent. Separate from unit."
   },

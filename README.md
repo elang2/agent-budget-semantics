@@ -23,7 +23,7 @@ Including archived/experimental frameworks (OpenAI Swarm), the spread widens to 
 Counting logic derived from source code analysis at pinned versions (see [PINS.md](PINS.md)).
 Rows upgrade to "executed" as the differential harness validates each prediction.
 
-| Framework | Version | `budget=3` means | Parallel 3 tools | Error retry | Final answer | Tier |
+| Framework | Version | `budget=3` means † | Parallel 3 tools ‡ | Error retry ‡ | Final answer ‡ | Tier |
 |-----------|---------|-----------------|------------------|-------------|--------------|------|
 | AutoGen | 0.4.7 | 2 agent turns (user msg eats 1) | 3 budget units | Counts | Counts | executed |
 | OpenAI Agents | 0.22.0 | 3 LLM invocations | 1 budget unit | Counts | Counts | executed |
@@ -40,6 +40,8 @@ Rows upgrade to "executed" as the differential harness validates each prediction
 Tier legend: **modeled** = counting logic derived from source code analysis at pinned version.
 **executed** = harness ran against mock LLM, observed values match model.
 **archived** = framework is experimental/not production (OpenAI Swarm).
+
+† The "`budget=3` means" column is validated by execution for rows marked `executed` (scenario S2). ‡ "Parallel 3 tools," "Error retry," and "Final answer" columns are derived from source-code analysis for all frameworks (scenarios S4/S5 not yet executed). These will upgrade to executed once the harness validates them.
 
 ## Install
 
