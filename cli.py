@@ -5,6 +5,7 @@ CLI for agent-budget-semantics.
 Usage:
     agent-budget-semantics compare           # Show iteration divergence matrix
     agent-budget-semantics cost              # Show cost divergence
+    agent-budget-semantics cost-source       # Show cost-recording schema fork (PR #443)
     agent-budget-semantics spans             # Show OTel span divergence
     agent-budget-semantics report            # Generate full report suite
     agent-budget-semantics run --all         # Run full differential test suite
@@ -59,6 +60,24 @@ def cmd_spans(args):
         scenario="S2-budget-exhaustion",
         budget_limit=3, llm_calls=4, tool_calls=3, total_tokens=478,
     )
+
+
+def cmd_cost_source(args):
+    """Show attribute-schema divergence across cost-recording emitters
+    (Pydantic AI/Logfire, OpenRouter, LiteLLM, direct SDK, provider-returned,
+    backend enrichment). Empirical evidence for OTel PR
+    open-telemetry/semantic-conventions-genai#443."""
+    from cost_source_divergence import (
+        SimulatedCall,
+        print_divergence_table,
+    )
+    call = SimulatedCall(
+        model=args.model,
+        input_tokens=args.input_tokens,
+        output_tokens=args.output_tokens,
+        provider_returned_cost=args.provider_cost,
+    )
+    print_divergence_table(call)
 
 
 def cmd_report(args):
@@ -132,6 +151,18 @@ def main():
 
     p_spans = sub.add_parser("spans", help="Show OTel telemetry divergence")
     p_spans.set_defaults(func=cmd_spans)
+
+    p_cs = sub.add_parser(
+        "cost-source",
+        help="Show cost-recording attribute-schema divergence (PR #443 evidence)",
+    )
+    p_cs.add_argument("--model", default="gpt-4o",
+                      choices=["gpt-4o", "gpt-4o-mini", "claude-sonnet-4", "claude-opus-4"])
+    p_cs.add_argument("--input-tokens", type=int, default=350)
+    p_cs.add_argument("--output-tokens", type=int, default=128)
+    p_cs.add_argument("--provider-cost", type=float, default=None,
+                      help="Cost value returned by the provider in the response, if any")
+    p_cs.set_defaults(func=cmd_cost_source)
 
     p_report = sub.add_parser("report", help="Generate full markdown/JSON report suite")
     p_report.add_argument("--output", default="reports", help="Output directory")

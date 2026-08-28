@@ -1,6 +1,6 @@
 [project]
 name = "agent-budget-semantics"
-version = "0.3.0"
+version = "0.4.0"
 description = "Differential testing of budget enforcement semantics across AI agent frameworks"
 requires-python = ">=3.11"
 license = "Apache-2.0"

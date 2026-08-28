@@ -54,6 +54,7 @@ Or with Docker (no dependencies):
 ```bash
 docker run --rm ghcr.io/elang2/agent-budget-semantics compare
 docker run --rm ghcr.io/elang2/agent-budget-semantics cost
+docker run --rm ghcr.io/elang2/agent-budget-semantics cost-source
 docker run --rm ghcr.io/elang2/agent-budget-semantics spans
 ```
 
@@ -118,6 +119,31 @@ autogen          8       5          167%     root → 4 llm → 3 tool
 langchain        6       3          100%     root → 4 llm → 1 batch
 swarm            8       10         333%     root → 4 llm → 3 tool
 ```
+
+### Cost-source divergence (empirical companion to OTel PR #443)
+
+Six real-world cost-recording emitters, five distinct attribute schemas for the same LLM call. Backend enrichment produces a different value than request-time emission because its pricing has drifted.
+
+```
+Emitter                                Layer              Attrs                                        cost.source
+Pydantic AI + Logfire (genai-prices)   client_library     operation.cost                               local
+OpenRouter (cost headers)              gateway            gen_ai.usage.input_cost,output_cost,total    provider
+LiteLLM proxy                          gateway            gen_ai.usage.cost, gen_ai.cost.amount        local
+Direct provider SDK                    client_library     (none)                                       out-of-scope
+Provider-returned cost (hypothetical)  provider_response  (none)                                       provider
+Backend enrichment (stale pricing)     backend            gen_ai.usage.cost.amount                     out-of-scope
+
+Distinct attribute schemas: 5
+```
+
+Under [PR #443's](https://github.com/open-telemetry/semantic-conventions-genai/pull/443) proposed v0.1 shape, in-scope emitters converge to `gen_ai.usage.cost.amount` + `.currency` + `.source` with the enum `provider | local`. Backend enrichment stays out of scope because its pricing may have drifted since the call, so it cannot claim the same request-time reliability the enum promises.
+
+```bash
+agent-budget-semantics cost-source
+agent-budget-semantics cost-source --model claude-sonnet-4 --provider-cost 0.008
+```
+
+Full API + test coverage in `cost_source_divergence.py` and `tests/test_cost_source_divergence.py` (29 tests).
 
 ## 12 Scenarios, 24 Dimensions
 
