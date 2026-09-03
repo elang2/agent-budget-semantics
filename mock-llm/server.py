@@ -100,6 +100,7 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(content_length))
 
         model = body.get("model", "mock-budget-llm")
+        stream = bool(body.get("stream", False))
         scripted = get_next_response()
 
         prompt_tokens = scripted.get("prompt_tokens", 100)
@@ -119,9 +120,26 @@ class Handler(BaseHTTPRequestHandler):
             "total_tokens": total_tokens,
             "tool_calls_requested": len(tool_calls) if tool_calls else 0,
             "finish_reason": finish_reason,
+            "streamed": stream,
         }
         with LEDGER_LOCK:
             LEDGER.append(entry)
+
+        if stream:
+            self._respond_stream(
+                request_id=request_id,
+                model=model,
+                content=scripted.get("content", "") or "",
+                tool_calls=tool_calls,
+                finish_reason="tool_calls" if tool_calls else finish_reason,
+                stream_chunks=int(scripted.get("stream_chunks", 1) or 1),
+                usage={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                },
+            )
+            return
 
         message = {"role": "assistant"}
         if tool_calls:
@@ -157,6 +175,78 @@ class Handler(BaseHTTPRequestHandler):
             },
         }
         self._respond(200, response)
+
+    def _respond_stream(
+        self,
+        request_id: str,
+        model: str,
+        content: str,
+        tool_calls: Optional[list],
+        finish_reason: str,
+        stream_chunks: int,
+        usage: dict,
+    ):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        created = int(time.time())
+
+        def frame(delta: dict, finish: Optional[str] = None) -> bytes:
+            chunk = {
+                "id": request_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish},
+                ],
+            }
+            return b"data: " + json.dumps(chunk).encode() + b"\n\n"
+
+        try:
+            self.wfile.write(frame({"role": "assistant", "content": ""}))
+
+            if tool_calls:
+                for i, tc in enumerate(tool_calls):
+                    self.wfile.write(frame({"tool_calls": [{
+                        "index": i,
+                        "id": tc.get("id"),
+                        "type": tc.get("type", "function"),
+                        "function": {
+                            "name": tc.get("function", {}).get("name"),
+                            "arguments": tc.get("function", {}).get("arguments", ""),
+                        },
+                    }]}))
+            elif content:
+                n = max(1, stream_chunks)
+                step = max(1, len(content) // n)
+                for i in range(n):
+                    start = i * step
+                    end = len(content) if i == n - 1 else start + step
+                    piece = content[start:end]
+                    if piece:
+                        self.wfile.write(frame({"content": piece}))
+
+            usage_frame = {
+                "id": request_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+                "usage": {
+                    **usage,
+                    "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
+                    "completion_tokens_details": {"reasoning_tokens": 0},
+                },
+            }
+            self.wfile.write(b"data: " + json.dumps(usage_frame).encode() + b"\n\n")
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _respond(self, code: int, body: dict):
         payload = json.dumps(body).encode()

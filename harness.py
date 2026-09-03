@@ -65,6 +65,7 @@ RUNNERS = {
     "swarm": "runners.runner_swarm",
     "llamaindex": "runners.runner_llamaindex",
     "agno": "runners.runner_agno",
+    "agno_stream": "runners.runner_agno_stream",
 }
 
 MOCK_PORT = 9111
