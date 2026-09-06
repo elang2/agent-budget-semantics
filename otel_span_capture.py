@@ -72,13 +72,10 @@ def simulate_framework_spans(framework: str, scenario_result: dict) -> CapturedT
         framework, gt.get("llm_calls", 0), gt.get("tool_calls", 0)
     )
     iter_util = iter_consumed / budget_value if budget_value else 0
-    # gen_ai.agent.token_budget.consumed is emitted only when the framework
-    # actually has a token_budget.limit to consume against. None of the 11
-    # tracked frameworks emit a token limit on a modeled invoke_agent today
-    # (Agno is the only candidate), so token_budget.consumed remains absent
-    # by default. Emitting "consumed=N, limit=None" would be spec-hostile:
-    # an operator computing utilization or an alerting rule using both
-    # attributes would build ratios on missing denominators.
+    # token_budget.consumed is a real measurement (total tokens observed
+    # across inference calls) and is meaningful independent of whether a
+    # token_budget.limit was configured. Utilization is what breaks without
+    # a limit, and that stays gated below.
     root_span = CapturedSpan(
         name=f"agent.invoke",
         kind="INTERNAL",
@@ -86,6 +83,7 @@ def simulate_framework_spans(framework: str, scenario_result: dict) -> CapturedT
             "gen_ai.system": _get_system_name(framework),
             "gen_ai.agent.iteration_budget.limit": budget_value,
             "gen_ai.agent.iteration_budget.consumed": iter_consumed,
+            "gen_ai.agent.token_budget.consumed": gt.get("total_tokens", 0),
             "gen_ai.invoke_agent.iteration_budget.utilization": round(iter_util, 3),
         },
     )

@@ -14,9 +14,18 @@ accumulator. Instrumentations wrap their invoke_agent in `budget_context()`
 and update the accumulator on each inference call; at agent end they read
 `snapshot()` and set it as attributes on the parent span.
 
+Caveat — thread-pool executors: Python contextvars propagate across
+asyncio tasks (each task copies the current context at spawn) but they
+do NOT propagate across a threading.Thread or ThreadPoolExecutor by
+default. An agent framework that dispatches inference through a thread
+pool needs to either capture the context and reapply it inside the
+worker (`ctx.run(record_inference, ...)`) or bind an equivalent
+per-run collector on a shared container. This is a known limitation of
+contextvars; documented here so callers can plan for it.
+
 Reference: Mandark-droid's implementation note on issue #425 (comment id
-5547801633, 2026-09-04) confirms this discipline works in practice across
-five agent frameworks.
+5547801633, 2026-09-04) confirms the accumulator discipline works in
+practice across five agent frameworks.
 """
 
 from contextvars import ContextVar

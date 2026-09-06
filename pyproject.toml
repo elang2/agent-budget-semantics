@@ -3,7 +3,7 @@ name = "agent-budget-semantics"
 version = "0.4.0"
 description = "Differential testing of budget enforcement semantics across AI agent frameworks"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 authors = [
     {name = "Elankumaran Srinivasan"}
 ]
@@ -11,7 +11,7 @@ readme = "README.md"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
