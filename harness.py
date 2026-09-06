@@ -141,7 +141,10 @@ async def run_scenario(scenario_path: str, frameworks: list[str]) -> list[dict]:
                     "llm_calls": result.actual_llm_calls,
                     "tool_calls": result.actual_tool_calls,
                     "stopped_by": result.stopped_by,
-                    "token_count": result.framework_token_count,
+                    "iteration_budget_limit": result.iteration_budget_limit,
+                    "iteration_budget_consumed": result.iteration_budget_consumed,
+                    "token_budget_limit": result.token_budget_limit,
+                    "token_budget_consumed": result.token_budget_consumed,
                 },
                 "ground_truth": {
                     "llm_calls": ledger_llm_calls,

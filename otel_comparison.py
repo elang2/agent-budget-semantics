@@ -23,6 +23,8 @@ Proposed OTel attributes (from open-telemetry/semantic-conventions-genai#439):
 import json
 from pathlib import Path
 
+from runners.base import iteration_budget_consumed_for
+
 
 FRAMEWORK_BUDGET_SEMANTICS = {
     "autogen": {
@@ -144,6 +146,10 @@ def simulate_otel_attributes(scenario_name: str, llm_calls: int, tool_calls: int
 def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
     """Predict what each framework would report as iterations consumed.
 
+    Thin wrapper over runners.base.iteration_budget_consumed_for, which owns
+    the canonical per-framework formula. Kept as a module-local alias so
+    downstream imports of `_calculate_consumed` continue to work.
+
     VALIDATED against mock LLM execution (2026-08-23):
       autogen: CORRECTED (was llm+tool, actual is 1+llm_calls)
       openai_agents: CONFIRMED (llm_calls)
@@ -154,29 +160,7 @@ def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
       llamaindex: CORRECTED (was tool_calls, actual is llm_calls)
       agno: INVALID (budget not enforced in v1.2.5)
     """
-    if framework == "autogen":
-        return 1 + llm_calls
-    elif framework == "openai_agents":
-        return llm_calls
-    elif framework == "langchain":
-        return tool_calls
-    elif framework == "langgraph":
-        return 1 + llm_calls + tool_calls
-    elif framework == "crewai":
-        return tool_calls
-    elif framework == "adk":
-        return tool_calls
-    elif framework == "semantic_kernel":
-        return tool_calls
-    elif framework == "anthropic":
-        return llm_calls
-    elif framework == "swarm":
-        return llm_calls + (tool_calls * 2)
-    elif framework == "llamaindex":
-        return llm_calls
-    elif framework == "agno":
-        return tool_calls
-    return llm_calls
+    return iteration_budget_consumed_for(framework, llm_calls, tool_calls)
 
 
 def print_comparison(scenario: str = "S2", budget_limit: int = 3,

@@ -92,7 +92,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             actual_llm_calls=llm_calls,
             actual_tool_calls=tool_calls_observed,
             stopped_by="completed" if result else "empty",
-            framework_token_count=None,
+            token_budget_consumed=None,
             metadata={
                 "note": "SK counts auto-invoke rounds, not individual tool calls. "
                        "3 parallel tool calls in one response = 1 attempt consumed.",

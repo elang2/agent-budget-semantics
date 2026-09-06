@@ -130,5 +130,5 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         actual_llm_calls=llm_calls,
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
-        framework_iteration_count=framework_message_count,
+        iteration_budget_consumed=framework_message_count,
     )

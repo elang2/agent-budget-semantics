@@ -1,0 +1,114 @@
+# Expected coverage of the four OTel semconv-genai #425 attributes per framework.
+#
+# For each framework, states which of the four proposed attributes its SDK
+# exposes signal for and can therefore populate on an invoke_agent span:
+#
+#   gen_ai.agent.iteration_budget.limit
+#   gen_ai.agent.iteration_budget.consumed
+#   gen_ai.agent.token_budget.limit
+#   gen_ai.agent.token_budget.consumed
+#
+# `yes`  = framework has a native signal we can wire to the attribute
+# `no`   = framework has no equivalent concept; attribute stays absent
+# `maybe`= framework exposes a partial signal that would need a runner-side
+#          policy decision to project onto the attribute (e.g. rate limits,
+#          per-call caps that are not cumulative)
+#
+# Source: source-code analysis at pinned versions (see PINS.md), corroborated
+# by runners/runner_<name>.py behavior. This file is the empirical answer to
+# Mandark-droid's "expected outcome for most frameworks" observation on
+# open-telemetry/semantic-conventions-genai#425.
+
+frameworks:
+  autogen:
+    version: "0.4.7"
+    iteration_budget_limit: yes         # MaxMessageTermination(max_messages=N)
+    iteration_budget_consumed: yes      # 1 + llm_calls (composite messages)
+    token_budget_limit: no              # not natively enforced (callback-only)
+    token_budget_consumed: no
+
+  openai_agents:
+    version: "0.22.0"
+    iteration_budget_limit: yes         # Runner.run(max_turns=N)
+    iteration_budget_consumed: yes      # llm_calls (each turn = one LLM invocation)
+    token_budget_limit: no
+    token_budget_consumed: no
+
+  langchain:
+    version: "0.3.14"
+    iteration_budget_limit: yes         # AgentExecutor(max_iterations=N)
+    iteration_budget_consumed: yes      # tool_calls (each iteration = tool-use cycle)
+    token_budget_limit: no              # per-call max_tokens is not cumulative
+    token_budget_consumed: no
+
+  langgraph:
+    version: "1.2.11"
+    iteration_budget_limit: yes         # config={"recursion_limit": N}
+    iteration_budget_consumed: yes      # 1 + llm_calls + tool_calls (graph node visits)
+    token_budget_limit: no
+    token_budget_consumed: no
+
+  crewai:
+    version: "1.15.16"
+    iteration_budget_limit: yes         # Agent(max_iter=N)
+    iteration_budget_consumed: yes      # tool_calls (tool-use cycles)
+    token_budget_limit: maybe           # max_rpm is rate limit, not cumulative token cap;
+                                        # issue #425 mapping table lists CrewAI as having a
+                                        # token budget, but the observable configuration is
+                                        # a rate limit and stays `maybe` until confirmed
+    token_budget_consumed: no
+
+  adk:
+    version: "1.2.1"
+    iteration_budget_limit: yes         # LoopAgent(max_iterations=N)
+    iteration_budget_consumed: yes      # tool_calls (full agent loops)
+    token_budget_limit: maybe           # configurable via callbacks, not a first-class API
+    token_budget_consumed: no
+
+  semantic_kernel:
+    version: "1.44.1"
+    iteration_budget_limit: yes         # maximum_auto_invoke_attempts=N
+    iteration_budget_consumed: yes      # tool_calls (auto-invoke rounds)
+    token_budget_limit: no              # max_tokens caps per call only
+    token_budget_consumed: no
+
+  anthropic:
+    version: "0.39.0"
+    iteration_budget_limit: yes         # client-defined loop counter; not server-side
+    iteration_budget_consumed: yes      # llm_calls (client counts each API call)
+    token_budget_limit: no              # max_tokens per response only
+    token_budget_consumed: no
+
+  swarm:
+    version: "0.1.0"
+    iteration_budget_limit: yes         # run(max_turns=N)
+    iteration_budget_consumed: yes      # llm_calls + tool_calls*2 (all history messages)
+    token_budget_limit: no
+    token_budget_consumed: no
+
+  llamaindex:
+    version: "0.14.24"
+    iteration_budget_limit: yes         # ReActAgent(max_iterations=N)
+    iteration_budget_consumed: yes      # llm_calls (each LLM response)
+    token_budget_limit: no
+    token_budget_consumed: no
+
+  agno:
+    version: "1.2.5"
+    iteration_budget_limit: yes         # Agent(tool_call_limit=N, reasoning_max_steps=N)
+    iteration_budget_consumed: yes      # tool_calls (though not enforced in v1.2.5)
+    token_budget_limit: yes             # cumulative output token budget (unique feature)
+    token_budget_consumed: maybe        # not surfaced in RunResult today; needs wiring
+
+
+# Coverage summary — matches Mandark-droid's "4 of 5 frameworks lack a token
+# budget" observation, extended to 11 frameworks:
+#
+#   iteration_budget.limit    : 11/11 native
+#   iteration_budget.consumed : 11/11 derivable (formulas in runners/base.py)
+#   token_budget.limit        : 1/11 native (Agno; CrewAI/ADK are `maybe`)
+#   token_budget.consumed     : 0/11 wired today (Agno is the only candidate)
+#
+# The proposed MUST NOT clause on #425 — "instrumentations MUST NOT synthesize
+# a token budget by multiplying iteration limits by per-call max_tokens" —
+# applies to 10-11 of the 11 frameworks here, i.e. it governs the common case.
