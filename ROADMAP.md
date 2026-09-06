@@ -135,6 +135,7 @@ If no external CI adoption, citation, or framework-maintainer engagement within 
 | hermes-agent #75097 | "Iteration budget semantics diverge" | Our entire project is the proof |
 | DSPy #10064 | Nested track_usage under-counts | Same aggregation problem we measure |
 | Pydantic AI #7133 | cost_limit non-deterministic when partial pricing | consumed_at_ground_truth vs counter_at_budget_stop |
-| OTel GenAI #439 | Budget governance span attributes | Our data is the empirical basis |
+| OTel GenAI #425 | Parent issue: budget governance attributes for invoke_agent | 11-framework differential + accumulator + nested-agent split |
+| OTel GenAI #439 | Spec PR carrying the four attributes (continuation of #426) | Our data is the empirical basis |
 | OTel GenAI #443 | Per-operation cost conventions | 5-unit divergence motivates cost.source |
 | MCP SEP-3004 | Audit record canonicalization | Cross-SDK divergence data |

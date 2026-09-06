@@ -323,10 +323,35 @@ gen_ai.agent.iteration_budget.counting_method
 ```
 
 Related PRs/Issues:
-- open-telemetry/semantic-conventions #439 (budget governance attributes)
-- open-telemetry/semantic-conventions #451 (turn count)
-- open-telemetry/semantic-conventions #447 (agent delegation)
-- open-telemetry/semantic-conventions #4025 (retry counting)
+- open-telemetry/semantic-conventions-genai #425 (parent issue — budget governance attributes for invoke_agent)
+- open-telemetry/semantic-conventions-genai #439 (spec PR carrying the four attributes; continuation of #426)
+- open-telemetry/semantic-conventions-genai #451 (turn count)
+- open-telemetry/semantic-conventions-genai #447 (agent delegation)
+- open-telemetry/semantic-conventions #4025 (retry counting — this one is in the main semconv repo, not the genai one)
+
+Empirical evidence in this repo maps onto the four points raised on issue
+#425 by Mandark-droid (issuecomment-5547801633, 2026-09-04):
+
+1. **Accumulate, don't sum from children.** `budget_accumulator.py` plus
+   `tests/test_sampling_survivability.py` show that a naive
+   sum-from-child-spans implementation reports zero consumption under
+   100% child-span sampling, whereas the contextvars accumulator reports
+   the correct total on the same trace.
+2. **Nested-agent direct vs subtree.** `tests/test_nested_delegation_split.py`
+   shows a supervisor + two sub-agents where the same trace produces
+   iterations=1 direct vs iterations=4 subtree, and tokens=150 direct vs
+   tokens=825 subtree. Same trace, 4x and 5.5x divergence.
+3. **The MUST NOT is doing real work.** `expectations/expected_shape.yaml`
+   shows that 10 of the 11 tracked frameworks expose no aggregate token
+   cap at all — emitting only `iteration_budget.*` is the expected outcome
+   for most frameworks, and `synthesis_detector.py` (wired into CI) fails
+   the build if any runner starts emitting a token budget that looks like
+   iteration_limit × per_call_max_tokens.
+4. **`iteration_budget.utilization` covers what `token_budget.utilization`
+   cannot.** The utilization column in the headline chart is now emitted
+   under the correctly-named `gen_ai.invoke_agent.iteration_budget.utilization`
+   attribute; `token_budget.utilization` is emitted only where a real
+   token cap exists (1 of 11).
 
 ## Project Structure
 
