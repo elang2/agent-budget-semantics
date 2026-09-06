@@ -31,8 +31,12 @@ per-call cap (128, 256, 512, 1024, 2048, 4096). This catches the mechanical
 token caps that happen to be integer multiples of iteration limits.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Iterable, Optional
+
+
+_LOG = logging.getLogger(__name__)
 
 
 # Common per-call max_tokens values that show up in framework defaults and
@@ -158,8 +162,33 @@ def scan(entries: Iterable[dict], framework_key: str = "framework") -> list[Find
 def enforce_no_synthesis(entries: Iterable[dict], framework_key: str = "framework") -> None:
     """Raise SynthesizedBudgetError if any entry is synthesized.
 
-    CI-friendly entry point: exit-code-nonzero on any hit.
+    Strict CI mode. Appropriate today because the modeled 11-framework
+    output emits token_budget.limit = None for every framework, so any
+    finding here is by construction a synthesis event. Use `warn_no_synthesis`
+    when scanning real runner-side output where a legitimate multiple-of-
+    common-max_tokens configuration is possible.
     """
     findings = scan(entries, framework_key=framework_key)
     if findings:
         raise SynthesizedBudgetError(findings)
+
+
+def warn_no_synthesis(entries: Iterable[dict], framework_key: str = "framework") -> list[Finding]:
+    """Advisory sibling of enforce_no_synthesis. Logs findings, does not raise.
+
+    Use when scanning real runner-side output. The heuristic cannot
+    distinguish "framework computed token_budget = iter_limit × max_tokens
+    itself" (real synthesis) from "operator set both knobs to values that
+    happen to have a common per-call value as their ratio" (legitimate
+    configuration). Advisory mode surfaces both for human review without
+    breaking builds on a false positive.
+
+    Returns the findings list so callers can act on it if they want.
+    """
+    findings = scan(entries, framework_key=framework_key)
+    for finding in findings:
+        _LOG.warning(
+            "Possible synthesized token budget on %s: %s",
+            finding.framework, finding,
+        )
+    return findings

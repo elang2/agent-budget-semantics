@@ -8,6 +8,7 @@ from synthesis_detector import (
     enforce_no_synthesis,
     is_synthesized,
     scan,
+    warn_no_synthesis,
 )
 
 
@@ -169,3 +170,26 @@ class TestCurrentReporterOutput:
             ]
         ]
         enforce_no_synthesis(entries)  # must not raise
+
+
+class TestAdvisoryMode:
+    """warn_no_synthesis is the sibling used for real runner-side output."""
+
+    def test_warn_returns_findings_but_does_not_raise(self, caplog):
+        entries = [
+            {"framework": "clean", **_attrs(5, 3000)},
+            {"framework": "flagged", **_attrs(10, 10240)},
+        ]
+        findings = warn_no_synthesis(entries)
+        assert len(findings) == 1
+        assert findings[0].framework == "flagged"
+
+    def test_warn_empty_when_clean(self):
+        entries = [{"framework": "clean", **_attrs(5, 3000)}]
+        assert warn_no_synthesis(entries) == []
+
+    def test_warn_logs_each_finding(self, caplog):
+        caplog.set_level("WARNING", logger="synthesis_detector")
+        entries = [{"framework": "flagged", **_attrs(10, 10240)}]
+        warn_no_synthesis(entries)
+        assert any("flagged" in rec.message for rec in caplog.records)
