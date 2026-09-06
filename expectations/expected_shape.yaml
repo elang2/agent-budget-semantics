@@ -122,7 +122,15 @@ frameworks:
 #                                 confirmed
 #                                 ADK's callback-based option is `maybe` and
 #                                 treated as absent
-#   token_budget.consumed     : 0/11 wired today (Agno is the only candidate)
+#   token_budget.consumed     : 0/11 emitted from runner-side instrumentation
+#                                 today (Agno is the only candidate for a
+#                                 real cumulative reading); the modeled
+#                                 simulator paths in otel_comparison.py and
+#                                 otel_span_capture.py DO emit
+#                                 total_tokens under this attribute for
+#                                 every framework, because raw consumed
+#                                 tokens are a real measurement independent
+#                                 of whether a cap was configured
 #
 # The proposed MUST NOT clause on #425 — "instrumentations MUST NOT synthesize
 # a token budget by multiplying iteration limits by per-call max_tokens" —
