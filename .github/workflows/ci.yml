@@ -26,6 +26,25 @@ jobs:
       - name: Unit tests
         run: pytest tests/ -v
 
+      - name: No synthesized token budgets
+        # Enforce the OTel semconv-genai#425 MUST NOT clause across the
+        # current 11-framework output. Fails the build if any runner starts
+        # emitting a token_budget.limit that looks like iteration_limit ×
+        # per_call_max_tokens.
+        run: |
+          python -c "
+          from otel_comparison import simulate_otel_attributes
+          from synthesis_detector import enforce_no_synthesis
+          results = simulate_otel_attributes(
+              scenario_name='S2-budget-exhaustion',
+              llm_calls=4, tool_calls=3,
+              total_tokens=478, budget_limit=3,
+          )
+          entries = [{'framework': fw, **attrs} for fw, attrs in results.items()]
+          enforce_no_synthesis(entries)
+          print(f'PASS: {len(entries)} frameworks emit no synthesized token budgets')
+          "
+
       - name: OTel comparison
         run: python otel_comparison.py
 
