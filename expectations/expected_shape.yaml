@@ -104,9 +104,24 @@ frameworks:
 # Coverage summary — matches Mandark-droid's "4 of 5 frameworks lack a token
 # budget" observation, extended to 11 frameworks:
 #
-#   iteration_budget.limit    : 11/11 native
+#   iteration_budget.limit    : 11/11 exposed
+#                                 native in 9
+#                                 client-side in Anthropic (loop counter is
+#                                   client-defined; there is no server-side
+#                                   knob)
+#                                 documented but not enforced in Agno v1.2.5
+#                                 (tool_call_limit is declared but the runner
+#                                 sees NOT ENFORCED behavior in this release)
 #   iteration_budget.consumed : 11/11 derivable (formulas in runners/base.py)
-#   token_budget.limit        : 1/11 native (Agno; CrewAI/ADK are `maybe`)
+#   token_budget.limit        : 1/11 native (Agno, a cumulative output cap)
+#                                 CrewAI is listed by #425's mapping table but
+#                                 the observable CrewAI configuration is
+#                                 max_rpm (rate limit, not a cumulative token
+#                                 cap); marked `maybe` on this file's CrewAI
+#                                 row and treated as absent in the count until
+#                                 confirmed
+#                                 ADK's callback-based option is `maybe` and
+#                                 treated as absent
 #   token_budget.consumed     : 0/11 wired today (Agno is the only candidate)
 #
 # The proposed MUST NOT clause on #425 — "instrumentations MUST NOT synthesize
