@@ -128,14 +128,21 @@ def simulate_otel_attributes(scenario_name: str, llm_calls: int, tool_calls: int
 
     for fw, semantics in FRAMEWORK_BUDGET_SEMANTICS.items():
         consumed = _calculate_consumed(fw, llm_calls, tool_calls)
-        utilization = consumed / budget_limit if budget_limit > 0 else 0
+        iter_util = consumed / budget_limit if budget_limit > 0 else 0
 
+        # token_budget.utilization requires a token limit. Only Agno has one
+        # among the 11 frameworks tracked here (see expectations/expected_shape.yaml).
+        # For every other framework the metric is absent, which is itself the
+        # empirical answer to Mandark-droid's Point 3 on issue #425: emitting
+        # only iteration_budget attributes is the expected outcome for most
+        # frameworks, not a coverage gap in the implementation.
         results[fw] = {
             "gen_ai.agent.iteration_budget.limit": budget_limit,
             "gen_ai.agent.iteration_budget.consumed": consumed,
             "gen_ai.agent.token_budget.limit": None,
             "gen_ai.agent.token_budget.consumed": total_tokens,
-            "gen_ai.invoke_agent.token_budget.utilization": round(utilization, 3),
+            "gen_ai.invoke_agent.iteration_budget.utilization": round(iter_util, 3),
+            "gen_ai.invoke_agent.token_budget.utilization": None,
             "budget_param_name": semantics["budget_param"],
             "counting_method": semantics["iteration_definition"],
         }
@@ -177,7 +184,7 @@ def print_comparison(scenario: str = "S2", budget_limit: int = 3,
     consumed_values = set()
     for fw, attrs in results.items():
         consumed = attrs["gen_ai.agent.iteration_budget.consumed"]
-        util = attrs["gen_ai.invoke_agent.token_budget.utilization"]
+        util = attrs["gen_ai.invoke_agent.iteration_budget.utilization"]
         method = FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"][:40]
         consumed_values.add(consumed)
         exceeded = " !! EXCEEDED" if consumed > budget_limit else ""

@@ -49,7 +49,8 @@ GENAI_ATTRIBUTES = {
     "gen_ai.agent.iteration_budget.consumed": "Iterations consumed",
     "gen_ai.agent.token_budget.limit": "Maximum tokens configured",
     "gen_ai.agent.token_budget.consumed": "Tokens consumed",
-    "gen_ai.invoke_agent.token_budget.utilization": "Budget utilization ratio",
+    "gen_ai.invoke_agent.iteration_budget.utilization": "Iteration budget utilization ratio",
+    "gen_ai.invoke_agent.token_budget.utilization": "Token budget utilization ratio",
 }
 
 
@@ -67,16 +68,19 @@ def simulate_framework_spans(framework: str, scenario_result: dict) -> CapturedT
     fr = scenario_result.get("framework_reports", {})
     budget_value = scenario_result.get("budget_value", 0)
 
+    iter_consumed = _calculate_consumed(
+        framework, gt.get("llm_calls", 0), gt.get("tool_calls", 0)
+    )
+    iter_util = iter_consumed / budget_value if budget_value else 0
     root_span = CapturedSpan(
         name=f"agent.invoke",
         kind="INTERNAL",
         attributes={
             "gen_ai.system": _get_system_name(framework),
             "gen_ai.agent.iteration_budget.limit": budget_value,
-            "gen_ai.agent.iteration_budget.consumed": _calculate_consumed(
-                framework, gt.get("llm_calls", 0), gt.get("tool_calls", 0)
-            ),
+            "gen_ai.agent.iteration_budget.consumed": iter_consumed,
             "gen_ai.agent.token_budget.consumed": gt.get("total_tokens", 0),
+            "gen_ai.invoke_agent.iteration_budget.utilization": round(iter_util, 3),
         },
     )
     trace.spans.append(root_span)
