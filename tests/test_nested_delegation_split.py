@@ -148,26 +148,45 @@ def test_snapshot_is_a_deep_copy():
         assert snap_at_readout.subtree_iterations() == 2
 
 
-def test_deep_nested_delegation_chain():
-    """A 4-level delegation chain: each level folds in every deeper level."""
+def test_deep_nested_delegation_with_branching():
+    """A branching tree: root has two children, one of which has a grandchild.
+
+    Explicit shape:
+        root  (10 in, 10 out, 1 iter)
+        ├── child_A  (20 in, 20 out, 1 iter)
+        │     └── grandchild  (40 in, 40 out, 1 iter)
+        └── child_B  (80 in, 80 out, 1 iter)
+
+    Branching matters: a mutation that recurses only into the first child
+    (e.g. `sum(... for c in self.children[:1])`) would still pass a
+    single-child-per-level chain but must fail here, because child_B
+    contributes 160 tokens and 1 iteration that the mutation would drop.
+    """
     with budget_context():
         record_inference(input_tokens=10, output_tokens=10)
         record_iteration()
-        with budget_context():
+
+        with budget_context():  # child_A
             record_inference(input_tokens=20, output_tokens=20)
             record_iteration()
-            with budget_context():
+            with budget_context():  # grandchild under child_A
                 record_inference(input_tokens=40, output_tokens=40)
                 record_iteration()
-                with budget_context():
-                    record_inference(input_tokens=80, output_tokens=80)
-                    record_iteration()
+
+        with budget_context():  # child_B (sibling of child_A)
+            record_inference(input_tokens=80, output_tokens=80)
+            record_iteration()
 
         root = snapshot()
 
-    # Direct: level 1 only.
+    # Direct: root's own inference only.
     assert root.total_tokens == 20
     assert root.iterations == 1
+
+    # Structural: two children on root, one grandchild under the first.
+    assert len(root.children) == 2
+    assert len(root.children[0].children) == 1
+    assert len(root.children[1].children) == 0
 
     # Subtree: 20 + 40 + 80 + 160 = 300, 1 + 1 + 1 + 1 = 4.
     assert root.subtree_total_tokens == 300

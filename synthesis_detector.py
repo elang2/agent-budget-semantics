@@ -39,12 +39,26 @@ from typing import Iterable, Optional
 # tutorials. If a token_budget.limit is a product involving one of these, we
 # suspect synthesis. Extend this list as new frameworks introduce distinctive
 # per-call defaults.
-COMMON_MAX_TOKENS = {128, 256, 512, 1024, 2048, 4096, 8192}
+#
+# Set covers powers of two (framework defaults for LangChain, LlamaIndex,
+# Semantic Kernel) plus round decimal values that appear in OpenAI/Anthropic
+# example code (500, 1000, 1500, 3000, 5000).
+COMMON_MAX_TOKENS = {
+    128, 256, 500, 512, 1000, 1024, 1500, 2000, 2048,
+    3000, 4000, 4096, 5000, 6000, 8000, 8192, 16384,
+}
 
 # Tolerance for detecting "close to a product" — token budgets set as a
 # product will hit exactly, but we allow a small integer slop for cases like
 # rounding up to a nearby power of two.
 PRODUCT_MATCH_TOLERANCE = 0.02
+
+# Minimum iteration limit below which the product-shape heuristic is
+# ambiguous: at iter_limit=1 any token_limit value trivially equals
+# 1 × token_limit, and a one-shot agent with a real token cap is a
+# legitimate configuration we cannot distinguish from a synthesized product.
+# Findings on iter_limit < this threshold are suppressed.
+MIN_ITER_LIMIT_FOR_DETECTION = 2
 
 
 @dataclass
@@ -97,6 +111,12 @@ def is_synthesized(
     if not isinstance(token_limit, (int, float)) or not isinstance(iter_limit, (int, float)):
         return None
     if iter_limit <= 0 or token_limit <= 0:
+        return None
+    # One-shot agents cannot be disambiguated: iter=1 makes any token_limit
+    # trivially match itself as a "product." Suppress findings under the
+    # threshold — false-positive prevention outweighs the loss of coverage
+    # (a genuinely synthesized budget on iter=1 is a null case anyway).
+    if iter_limit < MIN_ITER_LIMIT_FOR_DETECTION:
         return None
 
     quotient = token_limit / iter_limit

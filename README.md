@@ -327,7 +327,7 @@ Related PRs/Issues:
 - open-telemetry/semantic-conventions-genai #439 (spec PR carrying the four attributes; continuation of #426)
 - open-telemetry/semantic-conventions-genai #451 (turn count)
 - open-telemetry/semantic-conventions-genai #447 (agent delegation)
-- open-telemetry/semantic-conventions #4025 (retry counting — this one is in the main semconv repo, not the genai one)
+- open-telemetry/semantic-conventions-genai #476 (retry counting — transferred from semantic-conventions#4025)
 
 Empirical evidence in this repo maps onto the four points raised on issue
 #425 by Mandark-droid (issuecomment-5547801633, 2026-09-04):

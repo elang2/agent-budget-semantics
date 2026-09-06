@@ -136,11 +136,18 @@ def simulate_otel_attributes(scenario_name: str, llm_calls: int, tool_calls: int
         # empirical answer to Mandark-droid's Point 3 on issue #425: emitting
         # only iteration_budget attributes is the expected outcome for most
         # frameworks, not a coverage gap in the implementation.
+        #
+        # token_budget.consumed is likewise absent when there is no
+        # token_budget.limit — emitting one without the other invites
+        # downstream consumers to compute ratios on missing denominators
+        # and misleads spec authors about which pair of attributes ships.
+        # Total token consumption is still observable via the child
+        # inference spans' gen_ai.usage.input_tokens / output_tokens.
         results[fw] = {
             "gen_ai.agent.iteration_budget.limit": budget_limit,
             "gen_ai.agent.iteration_budget.consumed": consumed,
             "gen_ai.agent.token_budget.limit": None,
-            "gen_ai.agent.token_budget.consumed": total_tokens,
+            "gen_ai.agent.token_budget.consumed": None,
             "gen_ai.invoke_agent.iteration_budget.utilization": round(iter_util, 3),
             "gen_ai.invoke_agent.token_budget.utilization": None,
             "budget_param_name": semantics["budget_param"],

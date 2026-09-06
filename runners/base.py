@@ -32,15 +32,20 @@ _ITERATION_CONSUMED_FORMULAS = {
 }
 
 
-def iteration_budget_consumed_for(framework: str, llm_calls: int, tool_calls: int) -> int:
+def iteration_budget_consumed_for(framework: str, llm_calls: int, tool_calls: int) -> Optional[int]:
     """Return iterations consumed as the named framework would count them.
 
     Central table used by RunResult.__post_init__ and by otel_comparison's
     prediction model, so a single source of truth governs both.
+
+    Returns None for unknown frameworks. A silent fallback (e.g. returning
+    llm_calls) would mask an unrecognized runner and under-report by however
+    many tool_calls the framework actually counts. Callers that get None
+    must fill the field explicitly or add the framework to the table.
     """
     formula = _ITERATION_CONSUMED_FORMULAS.get(framework)
     if formula is None:
-        return llm_calls
+        return None
     return formula(llm_calls, tool_calls)
 
 

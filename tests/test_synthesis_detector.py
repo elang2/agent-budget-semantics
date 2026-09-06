@@ -46,6 +46,18 @@ class TestPositiveDetection:
         assert finding is not None
         assert finding.matched_max_tokens == 1024
 
+    def test_product_with_decimal_max_tokens_1000(self):
+        # Common OpenAI example uses max_tokens=1000; a product with iter=5
+        # yields token_limit=5000, which should be caught.
+        finding = is_synthesized(_attrs(5, 5000), framework="fake")
+        assert finding is not None
+        assert finding.matched_max_tokens == 1000
+
+    def test_product_with_decimal_max_tokens_1500(self):
+        finding = is_synthesized(_attrs(10, 15000), framework="fake")
+        assert finding is not None
+        assert finding.matched_max_tokens == 1500
+
 
 class TestNegativeDetection:
     """Cases the detector must NOT flag."""
@@ -64,8 +76,15 @@ class TestNegativeDetection:
         assert is_synthesized(_attrs(5, 3000), framework="fake") is None
 
     def test_ratio_far_from_common_max_tokens(self):
-        # iter=10, token=15000 -> quotient=1500, not near any of 128/256/512/1024/2048/4096
-        assert is_synthesized(_attrs(10, 15000), framework="fake") is None
+        # iter=10, token=12345 -> quotient=1234.5, not near any candidate
+        assert is_synthesized(_attrs(10, 12345), framework="fake") is None
+
+    def test_iter_limit_one_never_flags(self):
+        # A one-shot agent with a real 1024-token cap is legitimate, not
+        # synthesized; iter_limit=1 makes token_limit trivially equal
+        # 1 × token_limit, so this configuration is intentionally suppressed.
+        assert is_synthesized(_attrs(1, 1024), framework="one_shot") is None
+        assert is_synthesized(_attrs(1, 4096), framework="one_shot") is None
 
     def test_zero_iteration_limit_rejected(self):
         assert is_synthesized(_attrs(0, 1024), framework="fake") is None
