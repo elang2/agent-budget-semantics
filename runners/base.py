@@ -57,6 +57,12 @@ class RunResult:
     iteration_budget_consumed: Optional[int] = None
     token_budget_limit: Optional[int] = None
     token_budget_consumed: Optional[int] = None
+    # Subtree readings for supervisor runners delegating to sub-agents.
+    # Left None on non-delegating runs; when populated, they fold in every
+    # descendant agent's consumption. See tests/test_nested_delegation_split.py
+    # for the direct-vs-subtree divergence this pair is here to make visible.
+    iteration_budget_consumed_subtree: Optional[int] = None
+    token_budget_consumed_subtree: Optional[int] = None
     error: Optional[str] = None
     raw_output: Optional[str] = None
     metadata: dict = field(default_factory=dict)
