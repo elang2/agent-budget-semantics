@@ -1,5 +1,6 @@
 # agent-budget-semantics
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22119569.svg)](https://doi.org/10.5281/zenodo.22119569)
 [![PyPI version](https://img.shields.io/pypi/v/agent-budget-semantics)](https://pypi.org/project/agent-budget-semantics/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/agent-budget-semantics)](https://pypistats.org/packages/agent-budget-semantics)
 [![CI](https://github.com/elang2/agent-budget-semantics/actions/workflows/ci.yml/badge.svg)](https://github.com/elang2/agent-budget-semantics/actions/workflows/ci.yml)
@@ -7,6 +8,8 @@
 [![License](https://img.shields.io/pypi/l/agent-budget-semantics)](https://github.com/elang2/agent-budget-semantics/blob/main/LICENSE)
 
 Differential testing of budget enforcement semantics across 11 AI agent frameworks.
+
+Related project: [elang2/mcp-audit-gateway](https://github.com/elang2/mcp-audit-gateway) — companion cross-emitter differential-testing harness on the canonicalization (JCS) substrate, ten language SDKs producing byte-identical signed audit records.
 
 ## The Problem
 

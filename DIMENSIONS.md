@@ -112,8 +112,12 @@ means.
 
 ## Impact on OTel Semantic Conventions
 
-Without mandatory counting semantics metadata, the budget attributes in
-PR #439 are:
+PR #439, which proposed a shared iteration_budget attribute set, was
+closed on 2026-08-27 after maintainer review concluded that a single
+attribute cannot represent divergent counting semantics across
+frameworks in a comparable way. Without mandatory counting-semantics
+metadata (or, alternatively, framework-specific attribute names), a
+shared budget attribute is:
 
 1. Not comparable across frameworks (the primary use case for OTel)
 2. Meaningless for multi-framework dashboards
@@ -121,5 +125,10 @@ PR #439 are:
 4. Unstable for alert thresholds (same execution, different consumed values)
 5. Misleading for capacity planning
 
-Proposed fix: mandatory `gen_ai.agent.iteration_budget.counting_method` enum
-that classifies the framework's counting approach.
+Two directions are consistent with the closure. One is a mandatory
+`gen_ai.agent.iteration_budget.counting_method` enum that classifies
+the framework's counting approach (LLM calls, tool cycles, graph
+nodes, messages, etc.) — floated during the review. The other, which
+the review converged toward, is framework-specific attributes such
+as `openai.agent.max_turns` or `langchain.agent.max_iterations` where
+the counting semantics is fixed by definition.

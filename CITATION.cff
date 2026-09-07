@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this repository or its data in academic or standards work, please cite the paper below."
+title: "agent-budget-semantics: Differential Testing of Budget Enforcement Across AI Agent Frameworks"
+type: software
+authors:
+  - family-names: "Srinivasan"
+    given-names: "Elankumaran"
+    orcid: "https://orcid.org/0009-0001-2643-0389"
+repository-code: "https://github.com/elang2/agent-budget-semantics"
+license: MIT
+preferred-citation:
+  type: article
+  title: "Budget Enforcement Semantics Diverge Across AI Agent Frameworks: An Empirical Study"
+  authors:
+    - family-names: "Srinivasan"
+      given-names: "Elankumaran"
+      orcid: "https://orcid.org/0009-0001-2643-0389"
+  doi: "10.5281/zenodo.22119569"
+  year: 2026
+  month: 8
+  url: "https://doi.org/10.5281/zenodo.22119569"

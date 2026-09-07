@@ -15,7 +15,11 @@ To produce "executed" provenance, run the harness against the mock LLM:
 When harness results exist in results/, report_generator.py prefers them
 over this model. When they don't, results are labeled "modeled."
 
-Proposed OTel attributes (from open-telemetry/semantic-conventions-genai#439):
+OTel attribute names used here (from open-telemetry/semantic-conventions-genai
+#425 discussion; the shared-attribute spec PR #439 was closed on 2026-08-27
+after maintainer review concluded a single attribute cannot represent
+divergent counting semantics across frameworks — the simulator retains
+these names to model what the shared shape would look like):
   gen_ai.agent.iteration_budget.limit    - configured maximum iterations
   gen_ai.agent.iteration_budget.consumed - iterations used
 """
