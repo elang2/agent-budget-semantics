@@ -83,16 +83,28 @@ all = [
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["runners", "mock-llm"]
-include = [
+# NOTE: do not reintroduce `packages = [...]` alongside `include = [...]`.
+# Hatchling ignores a root-level `include` list when `packages` is set, which
+# silently shipped a wheel containing only runners/ and mock-llm/ through
+# v0.5.0: every root module below was absent, so `import budget_accumulator`
+# and `import synthesis_detector` raised ModuleNotFoundError after
+# `pip install`, and both [project.scripts] console entry points (declared as
+# `cli:main`) crashed. `only-include` selects exactly these paths at their
+# existing locations, with no path rewriting.
+only-include = [
+    "runners",
+    "mock-llm",
+    "scenarios",
+    "expectations",
+    "budget_accumulator.py",
+    "synthesis_detector.py",
+    "cost_divergence.py",
+    "cost_source_divergence.py",
     "cli.py",
     "harness.py",
     "otel_comparison.py",
     "otel_span_capture.py",
-    "cost_divergence.py",
     "report_generator.py",
-    "budget_accumulator.py",
-    "scenarios/",
     "DIMENSIONS.md",
 ]
 
@@ -108,8 +120,10 @@ include = [
     "otel_comparison.py",
     "otel_span_capture.py",
     "cost_divergence.py",
+    "cost_source_divergence.py",
     "report_generator.py",
     "budget_accumulator.py",
+    "synthesis_detector.py",
     "DIMENSIONS.md",
     "README.md",
     "LICENSE",

@@ -4,12 +4,22 @@ Cost Divergence Calculator — translates iteration/token divergence into real d
 The same work (same LLM calls, same tokens) produces different COST REPORTS
 depending on which framework's budget telemetry is used for billing/metering.
 
-This makes the abstract OTel divergence tangible:
+This makes the abstract OTel divergence tangible. As an illustration only:
   "Framework A says you used 3 budget units, Framework B says 7.
    At $0.03/unit, that's $0.09 vs $0.21 for the same work."
+That illustrative pair is a 2.33x spread (7/3); it is a worked example, not a
+measurement.
 
-For enterprises billing internal teams by agent-iteration-consumption,
-this is a 2.3x difference in chargeback depending on instrumentation choice.
+The measured figure, from calculate_cost_per_framework on the reference
+workload (4 LLM calls, 3 tool calls, 300 input / 178 output tokens, the
+enterprise-chargeback pricing model), is a **2.64x** max/min spread across the
+11 frameworks: 0.33834 for swarm against 0.12834 for agno. The spread traces to
+iteration-count disagreement rather than to token pricing.
+
+Earlier revisions of this docstring reported the illustrative 2.3x as though it
+were the measured spread. The two are now stated separately, and
+tests/test_cost_divergence.py::test_chargeback_divergence_paper_workload pins
+the measured value so the numbers cannot drift apart again.
 """
 
 from dataclasses import dataclass
