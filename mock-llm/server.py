@@ -21,6 +21,28 @@ SCRIPT: list[dict] = []
 SCRIPT_INDEX = 0
 
 
+# The token-details block the server emits on every response. These are
+# constants, not simulated cache behaviour: the mock holds no prompt cache, so
+# there is nothing to vary and nothing here infers a cache hit. They are named
+# once so the wire response and the ledger read from the same source, which is
+# what makes the ledger a record of what was emitted rather than a second,
+# separately maintained guess at it. Changing a value here changes both.
+EMITTED_CACHED_TOKENS = 0
+EMITTED_CACHE_WRITE_TOKENS = 0
+EMITTED_REASONING_TOKENS = 0
+
+
+def emitted_prompt_tokens_details() -> dict:
+    return {
+        "cached_tokens": EMITTED_CACHED_TOKENS,
+        "cache_write_tokens": EMITTED_CACHE_WRITE_TOKENS,
+    }
+
+
+def emitted_completion_tokens_details() -> dict:
+    return {"reasoning_tokens": EMITTED_REASONING_TOKENS}
+
+
 @dataclass
 class TokenUsage:
     prompt_tokens: int
@@ -38,6 +60,17 @@ class LedgerEntry:
     total_tokens: int
     tool_calls_requested: int
     finish_reason: str
+    streamed: bool = False
+    # Recorded, not simulated. The server emits a token-details block on every
+    # response and the ledger dropped it entirely, so the ledger could not
+    # answer what cache figures a framework had been told. A framework that
+    # reads prompt_tokens_details and reports a cache-adjusted cost is making a
+    # claim the ground truth had no basis on which to check it. These fields
+    # carry the emitted values through so that check becomes possible; they do
+    # not model a cache, and they are zero because zero is what is emitted.
+    cached_tokens: int = EMITTED_CACHED_TOKENS
+    cache_write_tokens: int = EMITTED_CACHE_WRITE_TOKENS
+    reasoning_tokens: int = EMITTED_REASONING_TOKENS
 
 
 def load_script(script_entries: list[dict]):
@@ -111,17 +144,27 @@ class Handler(BaseHTTPRequestHandler):
 
         request_id = f"mock-{int(time.time()*1000)}-{SCRIPT_INDEX}"
 
-        entry = {
-            "request_id": request_id,
-            "timestamp": time.time(),
-            "model": model,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": total_tokens,
-            "tool_calls_requested": len(tool_calls) if tool_calls else 0,
-            "finish_reason": finish_reason,
-            "streamed": stream,
-        }
+        # Built through LedgerEntry rather than as a free-standing dict so the
+        # dataclass is the schema instead of documentation of one. It was
+        # previously neither used nor kept in step: it had no `streamed` field
+        # while the appended dict did, and no cache fields while every response
+        # carried them.
+        #
+        # `finish_reason` here is the scripted value, deliberately captured
+        # before the `tool_calls` override below rewrites it for the wire. The
+        # ledger records what the script asked for; the response records what
+        # the client was told. Preserved as-is.
+        entry = asdict(LedgerEntry(
+            request_id=request_id,
+            timestamp=time.time(),
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            tool_calls_requested=len(tool_calls) if tool_calls else 0,
+            finish_reason=finish_reason,
+            streamed=stream,
+        ))
         with LEDGER_LOCK:
             LEDGER.append(entry)
 
@@ -165,13 +208,8 @@ class Handler(BaseHTTPRequestHandler):
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens,
-                "prompt_tokens_details": {
-                    "cached_tokens": 0,
-                    "cache_write_tokens": 0,
-                },
-                "completion_tokens_details": {
-                    "reasoning_tokens": 0,
-                },
+                "prompt_tokens_details": emitted_prompt_tokens_details(),
+                "completion_tokens_details": emitted_completion_tokens_details(),
             },
         }
         self._respond(200, response)
@@ -238,8 +276,8 @@ class Handler(BaseHTTPRequestHandler):
                 "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
                 "usage": {
                     **usage,
-                    "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
-                    "completion_tokens_details": {"reasoning_tokens": 0},
+                    "prompt_tokens_details": emitted_prompt_tokens_details(),
+                    "completion_tokens_details": emitted_completion_tokens_details(),
                 },
             }
             self.wfile.write(b"data: " + json.dumps(usage_frame).encode() + b"\n\n")

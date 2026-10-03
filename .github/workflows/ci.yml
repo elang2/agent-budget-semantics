@@ -54,8 +54,90 @@ jobs:
       - name: Span capture
         run: python otel_span_capture.py
 
-      - name: Report generation
-        run: python report_generator.py
+      - name: Report drift
+        # `python report_generator.py` used to run here and its output was
+        # discarded, so reports/ could drift from the generator indefinitely.
+        # It did: the committed reports/divergence-matrix.md carried
+        # `[3, 4, 7, 10]` while the generator produced `[3, 4, 5, 8, 10]`, and
+        # that stale set was copied into DIMENSIONS.md. This step regenerates
+        # into a scratch directory and fails on any difference, so reports/
+        # must be regenerated and committed in the same change as the inputs.
+        # Nothing in the working tree is modified, so a drifted reports/ can
+        # never be silently "fixed" by CI.
+        run: |
+          python - <<'PY'
+          import difflib, json, pathlib, sys
+          from report_generator import write_full_report
+
+          REGEN = pathlib.Path("/tmp/reports-regen")
+          COMMITTED = pathlib.Path("reports")
+          # The only field allowed to differ: report.json stamps the UTC date
+          # of generation, which changes daily and carries no finding.
+          VOLATILE = {"generated"}
+
+          write_full_report(str(REGEN))
+          drift = []
+
+          for regen_file in sorted(REGEN.iterdir()):
+              committed_file = COMMITTED / regen_file.name
+              if not committed_file.exists():
+                  drift.append(
+                      f"{regen_file.name}: generated but not committed under reports/"
+                  )
+                  continue
+
+              if regen_file.suffix == ".json":
+                  want = json.loads(regen_file.read_text())
+                  have = json.loads(committed_file.read_text())
+                  for key in VOLATILE:
+                      want.pop(key, None)
+                      have.pop(key, None)
+                  if want != have:
+                      drift.append(
+                          "\n".join(
+                              difflib.unified_diff(
+                                  json.dumps(have, indent=2, sort_keys=True).splitlines(),
+                                  json.dumps(want, indent=2, sort_keys=True).splitlines(),
+                                  f"committed/{regen_file.name}",
+                                  f"regenerated/{regen_file.name}",
+                                  lineterm="",
+                              )
+                          )
+                      )
+              elif committed_file.read_text() != regen_file.read_text():
+                  drift.append(
+                      "\n".join(
+                          difflib.unified_diff(
+                              committed_file.read_text().splitlines(),
+                              regen_file.read_text().splitlines(),
+                              f"committed/{regen_file.name}",
+                              f"regenerated/{regen_file.name}",
+                              lineterm="",
+                          )
+                      )
+                  )
+
+          stale = [p.name for p in sorted(COMMITTED.iterdir())
+                   if not (REGEN / p.name).exists()]
+          for name in stale:
+              drift.append(f"{name}: committed under reports/ but no longer generated")
+
+          checked = len(list(REGEN.iterdir()))
+          if drift:
+              print(f"FAIL: report drift, {len(drift)} of {checked} artefacts differ\n")
+              for item in drift:
+                  print(item)
+                  print()
+              print(
+                  "Regenerate and commit in the same change:\n"
+                  "    python report_generator.py\n"
+                  "    git add reports/"
+              )
+              sys.exit(1)
+
+          print(f"PASS: {checked} report artefacts match the generator "
+                f"(ignoring the {'/'.join(sorted(VOLATILE))} date stamp)")
+          PY
 
       - name: CLI smoke test
         run: |
@@ -72,27 +154,73 @@ jobs:
       - name: Build Docker image
         run: docker build -t agent-budget-semantics .
 
-      - name: Run comparison in Docker
-        run: docker run --rm agent-budget-semantics compare
+      - name: Run every advertised command in Docker
+        # Only `compare` and `cost` were exercised here, so the Dockerfile's
+        # COPY list could omit a module that README.md advertises and CI would
+        # stay green. It did: `cost_source_divergence.py` was never copied, so
+        # the documented `docker run ... cost-source` failed with
+        # ModuleNotFoundError. Every command the README offers for the image is
+        # now run, which is what keeps the COPY list honest.
+        run: |
+          set -euo pipefail
+          for cmd in compare cost cost-source spans dimensions; do
+            echo "--- docker run $cmd ---"
+            docker run --rm agent-budget-semantics "$cmd" > /dev/null
+          done
+          echo "PASS: 5 advertised container commands ran"
 
-      - name: Run cost analysis in Docker
-        run: docker run --rm agent-budget-semantics cost
+      - name: Modules the image must carry are importable
+        # The COPY list is the only thing standing between the image and a
+        # ModuleNotFoundError, and an import is cheaper to check than a
+        # command. budget_accumulator and synthesis_detector were both absent
+        # while CI gated on the no-synthesis rule in the test job, where the
+        # modules were present and the gap was invisible.
+        run: |
+          docker run --rm --entrypoint python agent-budget-semantics -c "
+          import cli, harness, otel_comparison, otel_span_capture
+          import cost_divergence, cost_source_divergence
+          import budget_accumulator, synthesis_detector, report_generator
+          import pathlib
+          assert pathlib.Path('expectations').is_dir(), 'expectations/ not copied'
+          assert pathlib.Path('scenarios').is_dir(), 'scenarios/ not copied'
+          print('PASS: all required modules and data directories present')
+          "
 
   per-framework:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        framework:
-          - autogen
-          - langchain
-          - langgraph
-          - crewai
-          - adk
-          - semantic-kernel
-          - anthropic
-          - llamaindex
-          - agno
+        # Two names per framework, because they are not the same name. `extra`
+        # is the [project.optional-dependencies] key in pyproject.toml, which
+        # is hyphenated; `runner` is the harness.py RUNNERS key, which is
+        # underscored. Passing the pip name to --frameworks makes harness.py
+        # print "Unknown framework: ..., skipping" and exit 0, so the previous
+        # single-name matrix ran nothing at all for semantic-kernel while
+        # reporting success. `continue-on-error` hid it, and removing that
+        # alone would not have caught it — hence the assertion step below.
+        include:
+          - {extra: autogen,         runner: autogen}
+          - {extra: openai-agents,   runner: openai_agents}
+          - {extra: langchain,       runner: langchain}
+          - {extra: langgraph,       runner: langgraph}
+          - {extra: crewai,          runner: crewai}
+          - {extra: adk,             runner: adk}
+          - {extra: semantic-kernel, runner: semantic_kernel}
+          - {extra: anthropic,       runner: anthropic}
+          - {extra: llamaindex,      runner: llamaindex}
+          - {extra: agno,            runner: agno}
+        # Two names exist in the codebase and are deliberately not gated here,
+        # recorded so the gap is a decision rather than an oversight:
+        #   swarm       — has both an extra and a runner, but PINS.md tiers
+        #                 OpenAI Swarm as archived (experimental/educational,
+        #                 not production), so it is not a conformance target.
+        #   agno_stream — a streaming variant runner over the same `agno`
+        #                 extra, not a separate framework. It belongs to the
+        #                 streaming dimension (S7) rather than to S2, so
+        #                 gating it on this scenario would prove nothing.
+        # Every other pyproject extra that names a framework is present above;
+        # `all` and `dev` are meta-extras and not framework rows.
 
     steps:
       - uses: actions/checkout@v4
@@ -102,9 +230,63 @@ jobs:
           python-version: '3.12'
 
       - name: Install base + framework
-        run: pip install -e ".[${{ matrix.framework }}]"
+        run: pip install -e ".[${{ matrix.extra }}]"
 
       - name: Run S2 scenario
+        # `continue-on-error: true` was removed. It made every row green
+        # whether the framework executed, errored or crashed, which is the
+        # same failure as discarding the report output: a check that cannot
+        # fail certifies nothing.
         run: |
-          python harness.py --scenario scenarios/S2-budget-exhaustion.yaml --frameworks ${{ matrix.framework }}
-        continue-on-error: true
+          set -o pipefail
+          python harness.py \
+            --scenario scenarios/S2-budget-exhaustion.yaml \
+            --frameworks ${{ matrix.runner }} \
+            --output results/ci-${{ matrix.runner }}.json 2>&1 | tee harness.log
+
+      - name: Assert the framework actually ran
+        # harness.py exits 0 on an unrecognised framework name, so a passing
+        # exit code is not evidence of execution. Require that the runner was
+        # not skipped and that it produced a result row of its own.
+        run: |
+          if grep -q "Unknown framework" harness.log; then
+            echo "FAIL: harness did not recognise '${{ matrix.runner }}'"
+            grep "Unknown framework" harness.log
+            exit 1
+          fi
+          python - <<'PY'
+          import json, os, sys, pathlib
+
+          runner = os.environ["RUNNER_KEY"]
+          path = pathlib.Path(f"results/ci-{runner}.json")
+          if not path.exists():
+              sys.exit(f"FAIL: {path} was not written")
+
+          data = json.loads(path.read_text())
+          rows = data if isinstance(data, list) else data.get("results", data)
+          if isinstance(rows, dict):
+              rows = list(rows.values())
+          names = {r.get("framework") for r in rows if isinstance(r, dict)}
+          if runner not in names:
+              sys.exit(
+                  f"FAIL: no result row for '{runner}'; "
+                  f"{len(rows)} row(s) present for {sorted(n for n in names if n)}"
+              )
+          print(f"PASS: '{runner}' produced {sum(1 for r in rows if r.get('framework') == runner)} result row(s)")
+          PY
+        env:
+          RUNNER_KEY: ${{ matrix.runner }}
+
+      - name: Upload results
+        # The per-framework runs produced no retrievable output before this.
+        # `if: always()` so a failed run still uploads its log, which is the
+        # artefact you need in order to diagnose the failure.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s2-${{ matrix.runner }}
+          path: |
+            results/ci-${{ matrix.runner }}.json
+            harness.log
+          if-no-files-found: warn
+          retention-days: 30
