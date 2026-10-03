@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "validated": "2026-08-24",
+  "generated": "2026-10-03",
   "ground_truth": {
     "llm_calls": 4,
     "tool_calls": 3,
@@ -15,7 +15,7 @@
     },
     "openai_agents": {
       "package": "openai-agents",
-      "version": "0.1.1",
+      "version": "0.22.0",
       "tier": "executed"
     },
     "langchain": {
@@ -25,28 +25,28 @@
     },
     "langgraph": {
       "package": "langgraph",
-      "version": "0.3.21",
+      "version": "1.2.11",
       "tier": "executed"
     },
     "crewai": {
       "package": "crewai",
-      "version": "0.108.0",
+      "version": "1.15.16",
       "tier": "executed"
     },
     "adk": {
       "package": "google-adk",
       "version": "1.2.1",
-      "tier": "executed"
+      "tier": "modeled"
     },
     "semantic_kernel": {
       "package": "semantic-kernel",
-      "version": "1.17.1",
+      "version": "1.44.1",
       "tier": "executed"
     },
     "anthropic": {
       "package": "anthropic",
       "version": "0.39.0",
-      "tier": "executed"
+      "tier": "modeled"
     },
     "swarm": {
       "package": "openai-swarm",
@@ -55,7 +55,7 @@
     },
     "llamaindex": {
       "package": "llama-index-core",
-      "version": "0.11.23",
+      "version": "0.14.24",
       "tier": "executed"
     },
     "agno": {
@@ -66,97 +66,179 @@
   },
   "frameworks": {
     "autogen": {
-      "consumed": 7,
-      "utilization": 2.33,
+      "consumed": 5,
+      "utilization": 1.67,
       "exceeded": true,
-      "budget_param": "max_turns",
-      "counting_method": "Each message (LLM response OR tool result) in the group chat"
+      "budget_param": "MaxMessageTermination(max_messages=N)",
+      "counting_method": "Composite messages (1 user + N agent turns)",
+      "provenance": "executed",
+      "version": "0.4.7",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "openai_agents": {
       "consumed": 4,
       "utilization": 1.33,
       "exceeded": true,
-      "budget_param": "max_turns",
-      "counting_method": "Each full LLM invocation"
+      "budget_param": "Runner.run(max_turns=N)",
+      "counting_method": "Each full LLM invocation",
+      "provenance": "executed",
+      "version": "0.22.0",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "langchain": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iterations",
-      "counting_method": "Each tool-use cycle (action + observation)"
+      "budget_param": "AgentExecutor(max_iterations=N)",
+      "counting_method": "Each tool-use cycle (action + observation)",
+      "provenance": "executed",
+      "version": "0.3.14",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "langgraph": {
-      "consumed": 7,
-      "utilization": 2.33,
+      "consumed": 8,
+      "utilization": 2.67,
       "exceeded": true,
-      "budget_param": "recursion_limit",
-      "counting_method": "Each graph node execution"
+      "budget_param": "config={\"recursion_limit\": N}",
+      "counting_method": "Graph node visits including __start__ (2 nodes per iteration)",
+      "provenance": "executed",
+      "version": "1.2.11",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "crewai": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "max_iter",
-      "counting_method": "Each tool-use cycle"
+      "budget_param": "Agent(max_iter=N)",
+      "counting_method": "Each tool-use cycle",
+      "provenance": "executed",
+      "version": "1.15.16",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "adk": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
       "budget_param": "max_iterations",
-      "counting_method": "Each full agent loop (plan + act + observe)"
+      "counting_method": "Each full agent loop (plan + act + observe)",
+      "provenance": "modeled",
+      "version": "1.2.1",
+      "tier": "modeled",
+      "status": "modeled_not_measured",
+      "reason": null,
+      "enforced": null
     },
     "semantic_kernel": {
       "consumed": 3,
       "utilization": 1.0,
       "exceeded": false,
-      "budget_param": "maximum_auto_invoke_attempts",
-      "counting_method": "Each auto-invoke round"
+      "budget_param": "FunctionChoiceBehavior.Auto(maximum_auto_invoke_attempts=N)",
+      "counting_method": "Each auto-invoke round",
+      "provenance": "executed",
+      "version": "1.44.1",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "anthropic": {
       "consumed": 4,
       "utilization": 1.33,
       "exceeded": true,
       "budget_param": "NONE (client-side only)",
-      "counting_method": "Client-defined (no server concept)"
+      "counting_method": "Client-defined (no server concept)",
+      "provenance": "modeled",
+      "version": "0.39.0",
+      "tier": "modeled",
+      "status": "modeled_not_measured",
+      "reason": null,
+      "enforced": null
     },
     "swarm": {
       "consumed": 10,
       "utilization": 3.33,
       "exceeded": true,
       "budget_param": "max_turns",
-      "counting_method": "Messages added to history since start"
+      "counting_method": "Messages added to history since start",
+      "provenance": "modeled",
+      "version": "0.1.0",
+      "tier": "archived",
+      "status": "modeled_not_measured",
+      "reason": null,
+      "enforced": null
     },
     "llamaindex": {
-      "consumed": 3,
-      "utilization": 1.0,
-      "exceeded": false,
-      "budget_param": "max_iterations",
-      "counting_method": "Each ReAct step (Thought + Action + Observation)"
+      "consumed": 4,
+      "utilization": 1.33,
+      "exceeded": true,
+      "budget_param": "agent.run(max_iterations=N)",
+      "counting_method": "Each LLM response (parse_agent_output calls)",
+      "provenance": "executed",
+      "version": "0.14.24",
+      "tier": "executed",
+      "status": "informative",
+      "reason": null,
+      "enforced": true
     },
     "agno": {
-      "consumed": 3,
-      "utilization": 1.0,
-      "exceeded": false,
-      "budget_param": "max_iterations",
-      "counting_method": "Each tool-use cycle"
+      "consumed": null,
+      "utilization": null,
+      "exceeded": null,
+      "budget_param": "Agent(tool_call_limit=N)",
+      "counting_method": "Each tool-use cycle",
+      "provenance": "executed",
+      "version": "1.2.5",
+      "tier": "executed",
+      "status": "uninformative",
+      "reason": "budget_not_enforced_no_counter_emitted",
+      "enforced": false
     }
   },
   "summary": {
     "unique_consumed_values": [
       3,
       4,
-      7,
+      5,
+      8,
       10
     ],
-    "disagreement_factor": 4,
+    "disagreement_factor": 5,
     "frameworks_exceeded": [
       "autogen",
       "openai_agents",
       "langgraph",
       "anthropic",
-      "swarm"
-    ]
+      "swarm",
+      "llamaindex"
+    ],
+    "frameworks_uninformative": [
+      "agno"
+    ],
+    "provenance_breakdown": {
+      "executed": 8,
+      "modeled": 3
+    },
+    "denominators": {
+      "rows_total": 11,
+      "rows_executed": 8,
+      "rows_informative": 7,
+      "rows_uninformative": 1,
+      "note": "disagreement_factor counts distinct non-null consumed values. A row whose consumed is null reported no value rather than a different one, and is counted in rows_uninformative instead of being scored as agreement or disagreement. Validity gate after arXiv:2608.29930 section 4.3: such a cell scores None, not zero. rows_informative and rows_uninformative partition rows_executed only. The remaining rows_total - rows_executed rows are modeled: a source-code prediction is not a measurement and does not share a denominator with one. See summary.provenance_breakdown."
+    }
   }
 }

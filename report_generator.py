@@ -19,29 +19,99 @@ from otel_comparison import FRAMEWORK_BUDGET_SEMANTICS, _calculate_consumed
 
 
 def generate_divergence_matrix(llm_calls: int, tool_calls: int,
-                                total_tokens: int, budget_limit: int) -> str:
-    """Generate markdown divergence matrix."""
+                                total_tokens: int, budget_limit: int,
+                                scenario: str = "S2-budget-exhaustion",
+                                harness_results: Optional[dict] = None) -> str:
+    """Generate markdown divergence matrix.
+
+    Prefers executed readings over the prediction model, per framework, and says
+    which is which in a Provenance column. Before this, the matrix was generated
+    entirely from _calculate_consumed() even for frameworks that had been run,
+    so it reported the prediction model back as though it were measurement -- and
+    kept reporting the PRE-CORRECTION model, which is why the published figures
+    went stale against the data they were supposed to summarise.
+    """
+    if harness_results is None:
+        harness_results = _load_harness_results(scenario)
+
     lines = []
     lines.append("# Divergence Matrix")
     lines.append("")
     lines.append(f"**Ground truth:** {llm_calls} LLM calls, {tool_calls} tool calls, {total_tokens} tokens")
-    lines.append(f"**Budget limit:** {budget_limit}")
+    lines.append(f"**Comparison budget limit:** {budget_limit} (utilization denominator for every row)")
     lines.append("")
-    lines.append("| Framework | Budget Param | consumed | utilization | Counting Method |")
-    lines.append("|-----------|-------------|----------|-------------|-----------------|")
+    lines.append("| Framework | Budget Param | budget | consumed | utilization | Provenance | Counting Method |")
+    lines.append("|-----------|-------------|--------|----------|-------------|------------|-----------------|")
 
     consumed_values = set()
+    uninformative = []
+    executed_values = set()
     for fw, semantics in FRAMEWORK_BUDGET_SEMANTICS.items():
-        consumed = _calculate_consumed(fw, llm_calls, tool_calls)
-        consumed_values.add(consumed)
-        util = consumed / budget_limit if budget_limit > 0 else 0
+        hr = harness_results.get(fw)
+        if hr is not None:
+            consumed = hr["consumed_at_ground_truth"]
+            provenance = "executed"
+            budget_param = hr.get("budget_param") or semantics["budget_param"]
+            budget_shown = hr.get("budget_value")
+            budget_shown = budget_limit if budget_shown is None else budget_shown
+        else:
+            consumed = _calculate_consumed(fw, llm_calls, tool_calls)
+            provenance = "modeled"
+            budget_param = semantics["budget_param"]
+            budget_shown = budget_limit
+
         method = semantics["iteration_definition"][:50]
-        exceeded = " **EXCEEDED**" if consumed > budget_limit else ""
-        lines.append(f"| {fw} | `{semantics['budget_param']}` | {consumed}{exceeded} | {util:.0%} | {method} |")
+
+        if consumed is None:
+            # No counter was emitted. Printing the model's number here is exactly
+            # the substitution this report used to make, and it erased the finding.
+            uninformative.append(fw)
+            consumed_cell = "n/a **NOT ENFORCED**"
+            util_cell = "n/a"
+            method = f"{method} (unvalidated: no unit observed)"
+        else:
+            consumed_values.add(consumed)
+            if provenance == "executed":
+                executed_values.add(consumed)
+            util = consumed / budget_limit if budget_limit > 0 else 0
+            exceeded = " **EXCEEDED**" if consumed > budget_limit else ""
+            consumed_cell = f"{consumed}{exceeded}"
+            util_cell = f"{util:.0%}"
+
+        lines.append(
+            f"| {fw} | `{budget_param}` | {budget_shown} | {consumed_cell} | "
+            f"{util_cell} | {provenance} | {method} |"
+        )
 
     lines.append("")
     lines.append(f"**Unique consumed values:** `{sorted(consumed_values)}`")
     lines.append(f"**Disagreement factor:** {len(consumed_values)} different answers for same execution")
+    lines.append(f"**Executed rows only:** `{sorted(executed_values)}` "
+                 f"({len(executed_values)} different answers)")
+    lines.append("")
+    lines.append("## Reading this table")
+    lines.append("")
+    lines.append("- **Provenance** `executed` means the row is a reading taken from a run "
+                 "against the mock LLM. `modeled` means it is a prediction derived from "
+                 "reading the framework's source, and has not been run.")
+    lines.append("- **consumed** is normalised to the shared ground-truth workload above, "
+                 "so rows are comparable even where the executed run configured a "
+                 "different budget. **budget** is the limit that run actually configured; "
+                 "**utilization** uses the single comparison limit so the column is "
+                 f"commensurable, which means utilization is not consumed/budget where "
+                 f"the two differ. LangGraph is the one such row: it ran at "
+                 f"recursion_limit=6, and its utilization is reported against {budget_limit}.")
+    if uninformative:
+        lines.append(
+            "- **" + ", ".join(uninformative) + "** "
+            + ("reports" if len(uninformative) == 1 else "report")
+            + " no consumed value at all. The budget parameter exists, propagates, and "
+              "its enforcement code runs, but the outer agent loop ignores it, so no "
+              "counter is emitted and the agent runs unbounded. This is a measurement, "
+              "not a gap: scored as `n/a`, excluded from the disagreement count, and "
+              "never replaced by the prediction model's number. The Counting Method "
+              "shown for such a row is the unvalidated source-code model, since no "
+              "unit was observed to validate it against.")
     lines.append("")
 
     return "\n".join(lines)
@@ -141,20 +211,40 @@ def generate_framework_cards() -> str:
     return "\n".join(lines)
 
 
-def generate_otel_recommendations() -> str:
-    """Generate OTel attribute specification recommendations."""
+def generate_otel_recommendations(disagreement_factor: Optional[int] = None,
+                                   executed_count: Optional[int] = None,
+                                   modeled_count: Optional[int] = None) -> str:
+    """Generate OTel attribute specification recommendations.
+
+    The framework and divergence counts are passed in rather than written into
+    the text. Hardcoded, they went stale: this report said "4+ different values"
+    and "across 11 frameworks" while the data said five values across eight
+    executed frameworks and three modeled ones.
+    """
+    total = len(FRAMEWORK_BUDGET_SEMANTICS)
     lines = []
     lines.append("# OTel Semantic Convention Recommendations")
     lines.append("")
-    lines.append("Based on differential testing across 11 frameworks.")
+    if executed_count is not None and modeled_count is not None:
+        lines.append(f"Based on {total} frameworks: {executed_count} executed against the")
+        lines.append(f"mock LLM, {modeled_count} modeled from source and not run. Only the")
+        lines.append("executed rows are differential testing; the modeled rows are predictions.")
+    else:
+        lines.append(f"Based on differential testing across {total} frameworks.")
     lines.append("")
 
     lines.append("## Problem Statement")
     lines.append("")
     lines.append("The proposed `gen_ai.agent.iteration_budget.consumed` attribute")
-    lines.append("produces 4+ different values for the same execution depending on")
-    lines.append("which framework is instrumented. Without a mandatory counting")
-    lines.append("semantics enum, the attribute is not comparable across implementations.")
+    if disagreement_factor is not None:
+        lines.append(f"produces {disagreement_factor} different values for the same execution")
+        lines.append("depending on which framework is instrumented, and one framework emits")
+        lines.append("no value at all. Without a mandatory counting semantics enum, the")
+        lines.append("attribute is not comparable across implementations.")
+    else:
+        lines.append("produces multiple different values for the same execution depending on")
+        lines.append("which framework is instrumented. Without a mandatory counting")
+        lines.append("semantics enum, the attribute is not comparable across implementations.")
     lines.append("")
 
     lines.append("## Recommendation 1: Mandatory counting_method enum")
@@ -162,11 +252,20 @@ def generate_otel_recommendations() -> str:
     lines.append("```")
     lines.append("gen_ai.agent.iteration_budget.counting_method")
     lines.append("  Values:")
-    lines.append("    - llm_calls          (OpenAI Agents, Anthropic)")
-    lines.append("    - tool_cycles        (LangChain, CrewAI, ADK, SK, LlamaIndex, Agno)")
+    lines.append("    - llm_calls          (OpenAI Agents, LlamaIndex, Anthropic)")
+    lines.append("    - tool_cycles        (LangChain, CrewAI, ADK, SK)")
     lines.append("    - graph_nodes        (LangGraph)")
     lines.append("    - messages           (AutoGen, Swarm)")
+    lines.append("    - not_emitted        (Agno)")
     lines.append("```")
+    lines.append("")
+    lines.append("LlamaIndex sits under `llm_calls`, not `tool_cycles`: execution showed")
+    lines.append("`max_iterations` counting LLM responses. Agno gets no counting method")
+    lines.append("because it emitted no counter -- its budget parameter exists and")
+    lines.append("propagates, but the agent runs unbounded, so there is no unit to")
+    lines.append("classify. A spec enum needs a value for that case, or every")
+    lines.append("non-enforcing implementation will be recorded under a method it does")
+    lines.append("not implement. See results/S2-executed.json.")
     lines.append("")
 
     lines.append("## Recommendation 2: Parallel tool batch semantics")
@@ -245,17 +344,44 @@ def _load_harness_results(scenario: str) -> dict:
             elif isinstance(data, dict) and data.get("scenario") == scenario:
                 if "frameworks" in data and isinstance(data["frameworks"], dict):
                     for fw, fw_data in data["frameworks"].items():
-                        consumed = fw_data.get("consumed_at_ground_truth") or fw_data.get("consumed")
-                        if consumed is not None:
-                            executed[fw] = {
-                                "framework": fw,
-                                "scenario": scenario,
-                                "consumed_at_ground_truth": consumed,
-                                "unit_observed": fw_data.get("unit_observed"),
-                                "enforced": fw_data.get("enforced", True),
-                                "framework_version": fw_data.get("version"),
-                                "provenance": data.get("provenance", "executed"),
-                            }
+                        # Read whether the KEY is present, never whether its value is
+                        # truthy. `a or b` treats a legitimate null -- and a legitimate
+                        # 0 -- as absent. That is how agno used to be dropped here: it
+                        # was executed, its budget was not enforced, no counter was
+                        # emitted, so consumed_at_ground_truth is null by MEASUREMENT.
+                        # The `if consumed is not None` gate below it then excluded the
+                        # row from the executed set altogether, and generate_json_report
+                        # re-materialised it from the prediction model as consumed=3 and
+                        # relabelled it "modeled" -- a number for a counter that never
+                        # emitted, erasing the finding. A null row is kept and carried.
+                        if "consumed_at_ground_truth" in fw_data:
+                            consumed = fw_data["consumed_at_ground_truth"]
+                        elif "consumed" in fw_data:
+                            consumed = fw_data["consumed"]
+                        else:
+                            # Neither key present: this row carries no reading of any
+                            # kind, which is different from a row carrying a null one.
+                            continue
+                        executed[fw] = {
+                            "framework": fw,
+                            "scenario": scenario,
+                            "consumed_at_ground_truth": consumed,
+                            "unit_observed": fw_data.get("unit_observed"),
+                            "enforced": fw_data.get("enforced", True),
+                            "framework_version": fw_data.get("version"),
+                            "provenance": data.get("provenance", "executed"),
+                            # Per-cell validity contract (see the `schema` block and
+                            # `validity_contract` in results/S2-executed.json).
+                            "tier": fw_data.get("tier", "executed"),
+                            "status": fw_data.get("status"),
+                            "reason": fw_data.get("reason"),
+                            # Observed API surface. Preferred over the model's
+                            # budget_param, which is a reading of the source, not of
+                            # the run -- and which is wrong for agno (`max_iterations`
+                            # where the real parameter is `tool_call_limit`).
+                            "budget_param": fw_data.get("budget_param"),
+                            "budget_value": fw_data.get("budget_value"),
+                        }
                 elif "framework" in data:
                     executed[data["framework"]] = data
         except (json.JSONDecodeError, KeyError):
@@ -264,44 +390,93 @@ def _load_harness_results(scenario: str) -> dict:
 
 
 def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
-                          total_tokens: int, budget_limit: int) -> dict:
+                          total_tokens: int, budget_limit: int,
+                          harness_results: Optional[dict] = None) -> dict:
     """Generate structured JSON report.
 
     Prefers harness-executed results (provenance: "executed") when available
     in results/. Falls back to _calculate_consumed() model predictions
-    (provenance: "modeled") otherwise.
+    (provenance: "modeled") only for a framework with no executed row at all --
+    never for an executed row whose consumed reading is legitimately null.
     """
-    harness_results = _load_harness_results(scenario)
+    if harness_results is None:
+        harness_results = _load_harness_results(scenario)
 
     results = {}
     for fw in FRAMEWORK_BUDGET_SEMANTICS:
         if fw in harness_results:
             hr = harness_results[fw]
-            consumed = hr.get("consumed_at_ground_truth") or hr.get("consumed")
-            if consumed is None:
-                consumed = _calculate_consumed(fw, llm_calls, tool_calls)
-                provenance = "modeled"
-            else:
-                provenance = hr.get("provenance", "executed")
-            version = hr.get("framework_version", FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown"))
+            # An executed row stays executed. Its consumed reading may legitimately
+            # be None -- that is the measurement for a framework that ran without
+            # enforcing its budget -- and None must NOT fall through to the
+            # prediction model. The old `or`-chain plus `if consumed is None:
+            # consumed = _calculate_consumed(...)` did exactly that, turning agno's
+            # "no counter was emitted" into "consumed 3, provenance modeled". The
+            # only remaining fallback is for a framework with no executed row at all.
+            consumed = hr["consumed_at_ground_truth"]
+            provenance = hr.get("provenance", "executed")
+            version = hr.get("framework_version") or FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown")
+            status = hr.get("status")
+            reason = hr.get("reason")
+            enforced = hr.get("enforced", True)
+            budget_param = hr.get("budget_param") or FRAMEWORK_BUDGET_SEMANTICS[fw]["budget_param"]
         else:
             consumed = _calculate_consumed(fw, llm_calls, tool_calls)
             provenance = "modeled"
             version = FRAMEWORK_VERSIONS.get(fw, {}).get("version", "unknown")
+            # A modeled row is a source-code prediction, not a validity reading.
+            # It is neither informative nor uninformative in the sense of the
+            # validity contract, which gates measurements.
+            status = "modeled_not_measured"
+            reason = None
+            enforced = None
+            budget_param = FRAMEWORK_BUDGET_SEMANTICS[fw]["budget_param"]
 
         results[fw] = {
             "consumed": consumed,
-            "utilization": round(consumed / budget_limit, 2) if budget_limit > 0 else 0,
-            "exceeded": consumed > budget_limit,
-            "budget_param": FRAMEWORK_BUDGET_SEMANTICS[fw]["budget_param"],
+            "utilization": (
+                round(consumed / budget_limit, 2)
+                if consumed is not None and budget_limit > 0 else None
+            ),
+            "exceeded": consumed > budget_limit if consumed is not None else None,
+            "budget_param": budget_param,
             "counting_method": FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"],
             "provenance": provenance,
             "version": version,
+            "tier": hr.get("tier", "executed") if fw in harness_results
+                    else FRAMEWORK_VERSIONS.get(fw, {}).get("tier", "modeled"),
+            "status": status,
+            "reason": reason,
+            "enforced": enforced,
         }
 
-    consumed_values = sorted(set(r["consumed"] for r in results.values()))
+    # None is excluded from the disagreement set: a framework that reported no
+    # value did not report a DIFFERENT value, and folding it in either way would
+    # misstate the count. It is reported separately as `uninformative`.
+    consumed_values = sorted(
+        {r["consumed"] for r in results.values() if r["consumed"] is not None}
+    )
     executed_count = sum(1 for r in results.values() if r["provenance"] == "executed")
     modeled_count = sum(1 for r in results.values() if r["provenance"] == "modeled")
+
+    # Overlay the executed tier and version onto the static table. Left alone, the
+    # static table reports every framework at its modeled tier and modeled version
+    # even where an executed row exists -- and a hand-edited report.json once
+    # claimed tier "executed" for all eleven, including adk and anthropic, which
+    # were never run, and swarm, which is archived. Tier is derived, not typed.
+    framework_versions = {}
+    for fw, meta in FRAMEWORK_VERSIONS.items():
+        entry = dict(meta)
+        if fw in harness_results:
+            entry["tier"] = harness_results[fw].get("tier", "executed")
+            if harness_results[fw].get("framework_version"):
+                entry["version"] = harness_results[fw]["framework_version"]
+        framework_versions[fw] = entry
+
+    informative = [fw for fw, r in results.items()
+                   if r["provenance"] == "executed" and r["status"] == "informative"]
+    uninformative = [fw for fw, r in results.items()
+                     if r["provenance"] == "executed" and r["status"] == "uninformative"]
 
     return {
         "scenario": scenario,
@@ -312,7 +487,7 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
             "total_tokens": total_tokens,
             "budget_limit": budget_limit,
         },
-        "framework_versions": FRAMEWORK_VERSIONS,
+        "framework_versions": framework_versions,
         "frameworks": results,
         "summary": {
             "unique_consumed_values": consumed_values,
@@ -320,9 +495,27 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
             "frameworks_exceeded": [
                 fw for fw, r in results.items() if r["exceeded"]
             ],
+            "frameworks_uninformative": uninformative,
             "provenance_breakdown": {
                 "executed": executed_count,
                 "modeled": modeled_count,
+            },
+            "denominators": {
+                "rows_total": len(results),
+                "rows_executed": executed_count,
+                "rows_informative": len(informative),
+                "rows_uninformative": len(uninformative),
+                "note": (
+                    "disagreement_factor counts distinct non-null consumed values. "
+                    "A row whose consumed is null reported no value rather than a "
+                    "different one, and is counted in rows_uninformative instead of "
+                    "being scored as agreement or disagreement. Validity gate after "
+                    "arXiv:2608.29930 section 4.3: such a cell scores None, not zero. "
+                    "rows_informative and rows_uninformative partition rows_executed "
+                    "only. The remaining rows_total - rows_executed rows are modeled: "
+                    "a source-code prediction is not a measurement and does not share "
+                    "a denominator with one. See summary.provenance_breakdown."
+                ),
             },
         },
     }
@@ -333,8 +526,14 @@ def write_full_report(output_dir: str = "reports"):
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    # Load once and pass to both consumers, so the matrix and the JSON report
+    # cannot summarise two different reads of the same tree.
+    scenario = "S2-budget-exhaustion"
+    harness_results = _load_harness_results(scenario)
+
     matrix = generate_divergence_matrix(
-        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3
+        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3,
+        scenario=scenario, harness_results=harness_results,
     )
     (out / "divergence-matrix.md").write_text(matrix)
 
@@ -344,13 +543,21 @@ def write_full_report(output_dir: str = "reports"):
     cards = generate_framework_cards()
     (out / "framework-cards.md").write_text(cards)
 
-    recommendations = generate_otel_recommendations()
+    report = generate_json_report(
+        scenario=scenario,
+        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3,
+        harness_results=harness_results,
+    )
+
+    # Derived from the report that was just built off the same load, so the
+    # recommendations cannot cite a divergence count the data no longer supports.
+    recommendations = generate_otel_recommendations(
+        disagreement_factor=report["summary"]["disagreement_factor"],
+        executed_count=report["summary"]["provenance_breakdown"]["executed"],
+        modeled_count=report["summary"]["provenance_breakdown"]["modeled"],
+    )
     (out / "otel-recommendations.md").write_text(recommendations)
 
-    report = generate_json_report(
-        scenario="S2-budget-exhaustion",
-        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3
-    )
     (out / "report.json").write_text(json.dumps(report, indent=2))
 
     print(f"Reports written to {output_dir}/")

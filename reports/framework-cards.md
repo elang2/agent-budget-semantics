@@ -4,9 +4,9 @@
 
 | Property | Value |
 |----------|-------|
-| Budget Param | max_turns |
-| Iteration Definition | Each message (LLM response OR tool result) in the group chat |
-| What Counts | assistant_message + tool_result_message |
+| Budget Param | max_messages |
+| Iteration Definition | Composite messages (1 user + N agent turns) |
+| What Counts | TextMessage + ToolCallSummaryMessage (not individual events) |
 | Parallel Tools | Each tool result is a separate message = separate turn |
 | Final Answer | Counts as a turn |
 | Token Budget | Not natively enforced (callback-based) |
@@ -38,8 +38,8 @@
 | Property | Value |
 |----------|-------|
 | Budget Param | recursion_limit |
-| Iteration Definition | Each graph node execution |
-| What Counts | Node visits (agent node + tool node = 2 per iteration) |
+| Iteration Definition | Graph node visits including __start__ (2 nodes per iteration) |
+| What Counts | __start__(1) + agent_node(1) + tool_node(1) per iteration |
 | Parallel Tools | Tool node processes all parallel calls as 1 visit |
 | Final Answer | Counts as a node visit |
 | Token Budget | Not enforced |
@@ -104,10 +104,10 @@
 | Property | Value |
 |----------|-------|
 | Budget Param | max_iterations |
-| Iteration Definition | Each ReAct step (Thought + Action + Observation) |
-| What Counts | Complete reasoning steps; partial steps don't count |
-| Parallel Tools | Counted individually via max_function_calls (separate budget!) |
-| Final Answer | Gets one extra call via early_stopping_method='generate' |
+| Iteration Definition | Each LLM response (parse_agent_output calls) |
+| What Counts | Every LLM response increments counter (tool-calling and final alike) |
+| Parallel Tools | Batch = 1 iteration (one LLM response) |
+| Final Answer | Counts as an iteration |
 | Token Budget | Not enforced natively |
 
 ## agno
