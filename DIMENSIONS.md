@@ -100,15 +100,34 @@
 ## Key Finding
 
 For `gen_ai.agent.iteration_budget.consumed` with the SAME execution
-(4 LLM calls, 3 tool calls):
+(4 LLM calls, 3 tool calls), the frameworks report different values. These
+are not edge cases or implementation bugs. They are design disagreements
+about what "one iteration" means.
 
-```
-consumed = [3, 4, 7, 10]
+The values are deliberately not restated in this file, because a restated
+copy drifts from the data it describes. An earlier revision published
+`consumed = [3, 4, 7, 10]`, copied out of a `reports/` artefact that was
+already stale against its own generator, and that set matched nothing in the
+recorded results. `results/S2-executed.json` is the source of truth; derive
+the values from it:
+
+```bash
+python -c "
+import json
+fw = json.load(open('results/S2-executed.json'))['frameworks']
+vals = {k: v['consumed_at_ground_truth'] for k, v in fw.items() if v['enforced']}
+print(vals)
+print('distinct:', sorted(set(vals.values())))
+"
 ```
 
-depending on which framework. 4 different values. Not edge cases or
-implementation bugs. Fundamental design disagreements about what "one iteration"
-means.
+Two scoping notes, because the number of distinct values depends on which
+set you ask about. `consumed_at_ground_truth` is each framework's value on
+the common 4-LLM-call, 3-tool-call basis, and filtering on `enforced` drops
+the framework that accepts a budget without honouring it. That file covers
+the executed frameworks only, so the spread across all 11 frameworks in the
+coverage matrix above — modeled ones included — is wider than the
+executed-only set; `python otel_comparison.py` prints that larger view.
 
 ## Impact on OTel Semantic Conventions
 

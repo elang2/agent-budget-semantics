@@ -59,7 +59,20 @@ docker run --rm ghcr.io/elang2/agent-budget-semantics compare
 docker run --rm ghcr.io/elang2/agent-budget-semantics cost
 docker run --rm ghcr.io/elang2/agent-budget-semantics cost-source
 docker run --rm ghcr.io/elang2/agent-budget-semantics spans
+docker run --rm ghcr.io/elang2/agent-budget-semantics dimensions
 ```
+
+**What the container can and cannot do.** The image installs the `dev` extra
+and no agent framework, which is a deliberate boundary rather than an
+oversight. The five commands above are the derived analyses; they read
+committed inputs and need no framework, so they run anywhere with no API key
+and no network. What the container cannot do is execute a framework: `run`
+has no framework to drive, and the `executed` rows in the tables above cannot
+be regenerated inside it. That work needs the pinned environment in
+[PINS.md](PINS.md), because a result is only meaningful at the version it was
+observed at, and installing one of eleven frameworks at whatever version
+currently resolves would produce neither a differential result nor a pinned
+one.
 
 ## Quick Start
 
@@ -302,7 +315,9 @@ jobs:
 
 A deterministic mock LLM with a request ledger serves as ground truth. Scripted scenarios force tool-calling loops of known depth. Each framework runner executes the same scenario against the same mock. The harness compares what each framework reports vs. what actually happened.
 
-No real LLM API keys needed. No flaky network calls. Fully reproducible.
+No real LLM API keys are needed, and no request leaves the machine. The derived tables regenerate deterministically from committed inputs with one command, `python report_generator.py`, and CI fails if the committed output no longer matches the generator.
+
+Per-framework execution is weaker than that, and the distinction matters when reading the tables. Reproducing an `executed` row requires the pinned environment in [PINS.md](PINS.md), assembled by hand; each recorded value is a single run rather than a repeated measurement, so run-to-run stability is asserted nowhere; and no row has been independently replicated. Repeat execution is tracked in [ROADMAP.md](ROADMAP.md) and is not done.
 
 ## Three Architectural Models
 
@@ -316,14 +331,11 @@ Testing revealed three fundamentally different approaches to budget enforcement:
 
 ## Relevance to OTel GenAI Conventions
 
-This project provides empirical evidence for the budget governance discussion in the OpenTelemetry semantic conventions. Without mandatory counting semantics metadata, `gen_ai.agent.iteration_budget.consumed` is not comparable across frameworks.
+This project provides empirical evidence for the budget governance discussion in the OpenTelemetry semantic conventions. The finding is a negative one, and it is the result rather than a setback: a cross-framework `gen_ai.agent.iteration_budget.consumed` should not be named at all, because the counts frameworks report for one execution are not measurements of the same quantity.
 
-Proposed fix: mandatory `counting_method` enum that classifies the framework's approach:
+An earlier revision of this section proposed a mandatory `counting_method` enum — `llm_calls | tool_cycles | graph_nodes | messages` — as the fix. That proposal does not survive its own evidence, and the project no longer holds it. Spec PR #439 carried the attribute set and was withdrawn on 2026-08-27 after maintainer review concluded the values are not comparable across implementations whether or not a unit travels with them. Tagging a count with the unit that produced it makes the unit legible; it does not make two differently-counted numbers addable, comparable in a dashboard, or safe as an alert threshold, which were the use cases the attribute existed to serve.
 
-```
-gen_ai.agent.iteration_budget.counting_method
-  Values: llm_calls | tool_cycles | graph_nodes | messages
-```
+Two directions remain consistent with that closure, and neither is a shared `consumed` attribute. Framework-specific names such as `openai.agent.max_turns` or `langchain.agent.max_iterations` fix the counting semantics by definition, which is the direction the review converged toward. Alternatively, `iteration_budget.limit` may be recorded verbatim, as the framework was configured, with no cross-framework normalization attempted.
 
 Related PRs/Issues:
 - open-telemetry/semantic-conventions-genai #425 (parent issue — budget governance attributes for invoke_agent)
