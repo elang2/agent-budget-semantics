@@ -374,3 +374,26 @@ reading.
 supposed to catch the original. Three of these four would have been caught by asking one question
 of each fix: what did this make newly reachable? The scenario fix made harness rows reachable; the
 `/reset` fix made a stranger configurable; the precedence fix made filenames load-bearing.
+
+**And the class these all belong to, which is the single most useful sentence in this file: a check
+whose passing condition is reachable without the property it names.** Every incident recorded here
+and in E1 through E6 is an instance of it, and so are several outside this repository:
+
+- the pinning step whose `str.replace` matched nothing, so it wrote identical bytes and printed
+  success;
+- the assertion `"identical execution" not in line or "not" in line.lower()`, which passed any
+  line containing the word "not";
+- the mock that never read `tool_choice`, so "the framework ignored its own limit" was reachable
+  without the framework ignoring anything;
+- the `/reset` turn-count guard that compared the server's echo of our own payload against our own
+  payload — a number compared to itself;
+- `detect-secrets` without `--all-files`, which scanned zero files and reported clean;
+- a test that `pytest.skip`-ped when its subject artefact was absent, so deleting the artefact left
+  the suite green;
+- and, found while verifying this very entry, a `grep` over extracted tarball bytes that returned
+  nothing because the content was PDF and grep was silently skipping it as binary. The positive
+  control for the word "the" returned empty too, which is the only reason it was caught.
+
+The remedy is the same in every case and it is cheap: make the check prove it can fail. Assert a
+positive control, assert the denominator, assert the exit code, and prefer a check that derives a
+value over one that compares two values the same process produced.
