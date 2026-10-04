@@ -112,10 +112,37 @@ def cmd_dimensions(args):
         print("DIMENSIONS.md not found. Run from the project root.")
 
 
+def _load_mock_server():
+    """Import mock-llm/server.py by path.
+
+    The directory is named `mock-llm`, which is not a legal identifier, so it
+    can never be imported as a package however it is installed. An earlier
+    revision imported `mock_llm_pkg.server`, a package name that was never
+    created anywhere, so `agent-budget-semantics mock` raised
+    ModuleNotFoundError in the source tree, the wheel and the container alike.
+    The import is lazy, so `--help` kept working and nothing surfaced it.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    server_py = Path(__file__).parent / "mock-llm" / "server.py"
+    if not server_py.exists():
+        raise SystemExit(
+            f"mock server not found at {server_py}. Run from the project root, "
+            "or reinstall: the packaged wheel ships mock-llm/server.py."
+        )
+    spec = importlib.util.spec_from_file_location("abs_mock_server", server_py)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def cmd_mock(args):
     """Start the mock LLM server standalone (for manual testing)."""
     import yaml
-    from mock_llm_pkg.server import run, load_script
+
+    _mock = _load_mock_server()
+    run, load_script = _mock.run, _mock.load_script
 
     if args.script:
         with open(args.script) as f:

@@ -64,5 +64,6 @@
       "stopped_by": "budget",
       "notes": "Stopped at budget=2. Expected N messages for N tools, but batched."
     }
-  }
+  },
+  "validity_contract_scope": "This file is OUTSIDE the per-cell validity contract defined in results/S2-executed.json's schema (status: informative|uninformative|error). No row here carries a unit_observed or counter_at_budget_stop key, and enforced and actual_tool_calls are null throughout, so no row could be informative under that rule. Rows are labelled executed by TIER, which states that the run happened and says nothing about whether it can adjudicate a prediction. Do not read a row in this file as informative, and do not compare its values against S2's."
 }

@@ -205,6 +205,8 @@ Executed results in `results/S2-executed.json`.
 
 ### S4: Parallel Tools (3 tools requested in one LLM response) — executed
 
+*Outside the per-cell validity contract; see the `schema.status` note in `results/S2-executed.json`. The Status column below is a run outcome, not a validity verdict.*
+
 How many budget units does one parallel batch of 3 tools cost? Executed with 4 frameworks.
 
 | Framework | Batch cost | Status | Why |
@@ -225,6 +227,8 @@ How many budget units does one parallel batch of 3 tools cost? Executed with 4 f
 Spread among production frameworks: **1 to 3 (3x)**. Including archived Swarm: 1 to 6 (6x).
 
 ### S5: Error/Retry (budget=2, 1 failed + 1 retry) — executed
+
+*Outside the per-cell validity contract; see the `schema.status` note in `results/S2-executed.json`. The Status column below is a run outcome, not a validity verdict.*
 
 Executed with 4 frameworks showing whether retries count against budget.
 

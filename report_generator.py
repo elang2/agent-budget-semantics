@@ -450,7 +450,11 @@ def generate_json_report(scenario: str, llm_calls: int, tool_calls: int,
             ),
             "exceeded": consumed > budget_limit if consumed is not None else None,
             "budget_param": budget_param,
-            "counting_method": FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"],
+            # Named counting_unit, not counting_method: the retired proposal in
+            # Recommendation 1 was an OTel attribute spelled
+            # gen_ai.agent.iteration_budget.counting_method, and reusing that word
+            # here makes a reader think the report still proposes it.
+            "counting_unit": FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"],
             "provenance": provenance,
             "version": version,
             "tier": hr.get("tier", "executed") if fw in harness_results
