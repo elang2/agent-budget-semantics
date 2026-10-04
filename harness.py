@@ -19,6 +19,8 @@ import importlib
 import json
 import signal
 from typing import Optional
+
+from mock_control import assert_owned, free_port
 import subprocess
 import sys
 import time
@@ -69,11 +71,27 @@ RUNNERS = {
     "agno_stream": "runners.runner_agno_stream",
 }
 
-MOCK_PORT = 9111
-MOCK_URL = f"http://127.0.0.1:{MOCK_PORT}"
+# Assigned per run by start_mock_server rather than fixed. A hardcoded port
+# is how a run ends up measuring against a mock somebody else started; see
+# mock_control for the incident.
+MOCK_PORT = None
+MOCK_URL = None
+# The process we started, so reset_mock can re-assert identity rather than
+# trusting a turn count a stranger would also satisfy.
+_MOCK_PROC = None
 
 
 def start_mock_server(scenario_path: str) -> subprocess.Popen:
+    """Start a mock on a free port and prove the responder is ours.
+
+    Previously this bound a hardcoded 9111 and returned on the first HTTP 200
+    from /health, catching only httpx.ConnectError — so if anything was already
+    listening there, the child's bind failure went unnoticed and the whole run
+    measured against a stranger carrying an unknown script and policy.
+    """
+    global MOCK_PORT, MOCK_URL, _MOCK_PROC
+    MOCK_PORT = free_port()
+    MOCK_URL = f"http://127.0.0.1:{MOCK_PORT}"
     proc = subprocess.Popen(
         [sys.executable, "mock-llm/server.py", f"--port={MOCK_PORT}", f"--script={scenario_path}"],
         cwd=str(Path(__file__).parent),
@@ -81,9 +99,17 @@ def start_mock_server(scenario_path: str) -> subprocess.Popen:
         stderr=subprocess.PIPE,
     )
     for _ in range(50):
+        if proc.poll() is not None:
+            err = (proc.stderr.read() or b"").decode(errors="replace")[-400:]
+            raise RuntimeError(
+                f"mock exited with code {proc.returncode} before serving. "
+                f"stderr tail: {err}"
+            )
         try:
             r = httpx.get(f"{MOCK_URL}/health", timeout=0.5)
             if r.status_code == 200:
+                assert_owned(r.json(), proc)
+                _MOCK_PROC = proc
                 return proc
         except httpx.ConnectError:
             time.sleep(0.1)
@@ -110,6 +136,12 @@ def reset_mock(scenario: Optional[dict] = None):
                 f"workload. An older mock without script-on-reset support will "
                 f"report null here."
             )
+        # A turn count is not an identity. A stranger on this port will
+        # happily accept our script and report the expected count, which is
+        # how installing a script on reset made the hardcoded-port bug
+        # quieter rather than louder. Re-assert pid.
+        assert_owned(httpx.get(f"{MOCK_URL}/health", timeout=2).json(),
+                     _MOCK_PROC, require_empty_ledger=False)
 
 
 def get_ledger() -> list[dict]:

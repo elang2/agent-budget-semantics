@@ -480,6 +480,7 @@ def _load_harness_results(scenario: str) -> dict:
     # published report. Curated `*-executed.json` files are read LAST so later
     # assignment makes them authoritative, and both groups are sorted so two
     # machines produce the same report from the same directory.
+    skipped_no_reading = []
     paths = sorted(results_dir.glob("*.json"))
     ordered = ([q for q in paths if not q.name.endswith("-executed.json")]
                + [q for q in paths if q.name.endswith("-executed.json")])
@@ -489,9 +490,20 @@ def _load_harness_results(scenario: str) -> dict:
             data = json.loads(path.read_text())
             if isinstance(data, list):
                 for entry in data:
-                    if _scenario_key(entry.get("scenario")) == want:
-                        fw = entry["framework"]
-                        executed[fw] = entry
+                    if _scenario_key(entry.get("scenario")) != want:
+                        continue
+                    # harness.py's row schema has no `consumed_at_ground_truth`
+                    # -- it writes nested framework_reports/ground_truth blocks.
+                    # Before the scenario-name fix these rows never matched, so
+                    # the omission was invisible; afterwards they matched and
+                    # the generator died with KeyError at the first use. The
+                    # dict branch below has always guarded this with an
+                    # explicit `continue`; this branch did not.
+                    if "consumed_at_ground_truth" not in entry:
+                        skipped_no_reading.append(
+                            f"{path.name}:{entry.get('framework')}")
+                        continue
+                    executed[entry["framework"]] = entry
             elif isinstance(data, dict) and _scenario_key(data.get("scenario")) == want:
                 if "frameworks" in data and isinstance(data["frameworks"], dict):
                     for fw, fw_data in data["frameworks"].items():
@@ -552,6 +564,9 @@ def _load_harness_results(scenario: str) -> dict:
             "Every row would fall back to the prediction model and be labelled\n"
             "'modeled', which silently replaces the executed readings. That\n"
             "substitution is the one thing the validity contract exists to refuse.\n\n"
+            + (f"Skipped {len(skipped_no_reading)} matching row(s) that carry no "
+               f"consumed reading: {', '.join(skipped_no_reading[:8])}.\n"
+               if skipped_no_reading else "") +
             "If these are files `harness.py` wrote, check the scenario name: the\n"
             "harness records the scenario YAML's `name` while the report asks for\n"
             "the slug. Both forms are accepted now, so a mismatch here means a\n"

@@ -9,7 +9,7 @@ WORKDIR /app
 # and expectations/, so the accumulator and the no-synthesis enforcement that
 # CI gates on could not be exercised in the container at all.
 COPY pyproject.toml README.md LICENSE ./
-COPY cli.py harness.py ./
+COPY cli.py harness.py mock_control.py ./
 COPY otel_comparison.py otel_span_capture.py ./
 COPY cost_divergence.py cost_source_divergence.py ./
 COPY budget_accumulator.py synthesis_detector.py report_generator.py ./

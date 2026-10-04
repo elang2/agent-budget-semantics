@@ -110,6 +110,8 @@ only-include = [
     "cost_source_divergence.py",
     "cli.py",
     "harness.py",
+    # harness.py imports this; omitting it is the v0.5.0 wheel defect again.
+    "mock_control.py",
     "otel_comparison.py",
     "otel_span_capture.py",
     "report_generator.py",
@@ -127,6 +129,7 @@ include = [
     "experiments/",
     "cli.py",
     "harness.py",
+    "mock_control.py",
     "otel_comparison.py",
     "otel_span_capture.py",
     "cost_divergence.py",

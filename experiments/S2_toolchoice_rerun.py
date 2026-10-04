@@ -15,8 +15,10 @@ earlier run could not answer a question that was put to its output:
 3. The resolved version of every framework is recorded, so the file does not
    depend on PINS.md still being true when it is read.
 """
-import asyncio, datetime as dt, json, pathlib, socket, subprocess, sys, time, urllib.request
+import asyncio, datetime as dt, json, pathlib, subprocess, sys, time, urllib.request
 import importlib.metadata as md
+
+from mock_control import MockOwnershipError, assert_owned, free_port
 import yaml
 
 LEDGER_DIR = pathlib.Path("results/ledgers/S2-toolchoice-2026-10-04")
@@ -24,25 +26,13 @@ DIST = {"agno": "agno", "openai_agents": "openai-agents",
         "semantic_kernel": "semantic-kernel", "crewai": "crewai"}
 
 
-def free_port():
-    """Ask the OS for an unused port instead of guessing one.
-
-    Fixed ports are how a cell ends up talking to a stranger: on 2026-10-04 an
-    orphaned mock on 127.0.0.1:9803 answered the health check for the
-    openai_agents/ignore cell and produced 9 model calls against a recorded 3.
-    """
-    with socket.socket() as sk:
-        sk.bind(("127.0.0.1", 0))
-        return sk.getsockname()[1]
-
-
 def start(port, policy, scenario_path):
-    """Start a mock and PROVE the server answering is the one we started.
+    """Start a mock and prove the server answering is the one we started.
 
-    Liveness is not identity. /health returns the server's pid, its policy and
-    its loaded script length; all are asserted against what we asked for, so a
-    foreign server fails the run loudly instead of silently serving the wrong
-    script under the wrong policy.
+    The ownership logic lives in mock_control so that harness.py and this
+    driver cannot diverge again. They already did once: this file was hardened
+    after an orphaned mock served a cell, and harness.py — carrying the
+    identical hardcoded-port pattern — was left alone until an audit found it.
     """
     proc = subprocess.Popen([sys.executable, "mock-llm/server.py", f"--port={port}",
                              f"--script={scenario_path}", f"--tool-choice-policy={policy}"],
@@ -59,21 +49,12 @@ def start(port, policy, scenario_path):
         except Exception:
             time.sleep(0.2)
             continue
-        h = json.loads(raw)
-        for field, got, want in (("pid", h.get("pid"), proc.pid),
-                                 ("tool_choice_policy", h.get("tool_choice_policy"), policy),
-                                 ("script_turns", h.get("script_turns"), expected_turns)):
-            if got != want:
-                proc.kill()
-                raise SystemExit(
-                    f"the server on port {port} reports {field}={got!r} but we "
-                    f"require {want!r}. Refusing to measure against a server we "
-                    f"do not own: it may carry a different script or policy.")
-        if h.get("ledger_entries"):
+        try:
+            assert_owned(json.loads(raw), proc, policy=policy,
+                         expected_turns=expected_turns)
+        except MockOwnershipError as e:
             proc.kill()
-            raise SystemExit(
-                f"mock on {port} already has {h['ledger_entries']} ledger entries "
-                f"before the run started")
+            raise SystemExit(str(e))
         return proc
     proc.kill()
     raise SystemExit(f"mock {port} never came up")

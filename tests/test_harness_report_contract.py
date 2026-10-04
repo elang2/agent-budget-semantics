@@ -316,3 +316,80 @@ class TestTheDriverOwnsItsServer:
         branch = src.split('elif self.path == "/health":', 1)[1].split("else:", 1)[0]
         for field in ("pid", "tool_choice_policy", "script_turns", "ledger_entries"):
             assert field in branch, f"/health must report {field} so a caller can verify ownership"
+
+
+class TestHarnessOwnsItsServerToo:
+    """The audit's top finding: harness.py had the identical defect the driver
+    had just been fixed for, and the /reset-installs-a-script change made it
+    QUIETER — the correct script gets installed into the wrong process and the
+    turn-count check passes.
+    """
+
+    def test_harness_does_not_hardcode_a_port(self):
+        src = pathlib.Path("harness.py").read_text()
+        assert "MOCK_PORT = 9111" not in src, (
+            "a fixed port is how a run measures against a stranger")
+        assert "free_port()" in src
+
+    def test_harness_checks_the_child_is_alive_and_asserts_ownership(self):
+        src = pathlib.Path("harness.py").read_text()
+        body = src.split("def start_mock_server", 1)[1].split("\ndef ", 1)[0]
+        assert "proc.poll()" in body, (
+            "a bind failure must not be waited out against someone else's port")
+        assert "assert_owned" in body
+
+    def test_reset_mock_reasserts_identity_not_just_turn_count(self):
+        src = pathlib.Path("harness.py").read_text()
+        body = src.split("def reset_mock", 1)[1].split("\ndef ", 1)[0]
+        assert "assert_owned" in body, (
+            "a stranger will accept our script and report the expected turn "
+            "count; only pid distinguishes it")
+
+    def test_ownership_logic_is_shared_not_duplicated(self):
+        """The root cause was two copies, one fixed and one not."""
+        for f in ("harness.py", "experiments/S2_toolchoice_rerun.py"):
+            src = pathlib.Path(f).read_text()
+            assert "from mock_control import" in src, f"{f} must use the shared module"
+
+    def test_assert_owned_rejects_a_mock_that_cannot_identify_itself(self):
+        from mock_control import MockOwnershipError, assert_owned
+        class P:
+            pid = 1234
+        with pytest.raises(MockOwnershipError):
+            assert_owned({"status": "ok"}, P())          # no pid reported
+        with pytest.raises(MockOwnershipError):
+            assert_owned({"pid": 9999}, P())             # wrong pid
+        with pytest.raises(MockOwnershipError):
+            assert_owned({"pid": 1234, "ledger_entries": 3}, P())
+        with pytest.raises(MockOwnershipError):
+            assert_owned({"pid": 1234}, P(), policy="ignore")  # policy absent
+        assert_owned({"pid": 1234, "ledger_entries": 0}, P())  # the happy path
+
+
+class TestHarnessRowsDoNotCrashTheReport:
+    """The scenario-name fix made harness output matchable for the first time,
+    and harness rows carry no `consumed_at_ground_truth`. The list branch had
+    no guard where the dict branch has always had one, so `report` after a
+    default `run` died with KeyError.
+    """
+
+    def test_a_harness_shaped_row_is_skipped_not_fatal(self, tmp_path, monkeypatch):
+        import json
+        d = tmp_path / "results"
+        d.mkdir()
+        (d / "latest.json").write_text(json.dumps([{
+            "framework": "adk", "scenario": "S2 - Budget Exhaustion",
+            "budget_param": "max_iterations", "budget_value": 3,
+            "framework_reports": {"llm_calls": 4, "tool_calls": 3},
+            "ground_truth": {"llm_calls": 4, "tool_calls": 4, "total_tokens": 800},
+            "divergences": {}, "error": None}]))
+        (d / "S2-executed.json").write_text(json.dumps({
+            "scenario": "S2-budget-exhaustion", "provenance": "executed",
+            "frameworks": {"agno": {"consumed_at_ground_truth": None,
+                                    "enforced": False, "version": "1.2.5"}}}))
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(report_generator, "__file__", str(tmp_path / "report_generator.py"))
+        got = _load_harness_results("S2-budget-exhaustion")
+        assert "adk" not in got, (
+            "a row with no consumed reading must not be loaded as executed")
+        assert "agno" in got, "the curated row must still load"
