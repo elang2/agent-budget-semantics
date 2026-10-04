@@ -296,3 +296,81 @@ return only `natural`, `budget` or `error`. It is a fifth hand-authored value al
 `counter_at_budget_stop`, `unit_observed`, `mock_confirmed_calls` and `enforced`, and the string
 appears nowhere else in the repository. Today's runs give `error` under `ignore` and `natural`
 under `honour` for that cell, so the recorded stop reason is neither reproducible nor producible.
+
+---
+
+## E6 — a cell was measured against a mock this project did not start
+
+**Status.** Found and corrected 2026-10-04. The wrong value reached a local commit (`1847dce`) and
+was corrected in `523f958`. Both commits were unpushed at the time, so no published artefact ever
+carried it; recorded here because the mechanism is general and because the commit history shows the
+wrong number.
+
+**What happened.** `experiments/S2_toolchoice_rerun.py` started its mock on a port from a fixed
+range and treated the first HTTP 200 from `/health` as proof the server was its own. An orphaned
+mock from an interrupted earlier run was listening on `127.0.0.1:9803`, identified with `lsof`
+while the result was still wrong. That is the third port in the range and therefore exactly the
+`openai_agents/ignore` cell. The driver's own subprocess failed to bind, the orphan answered, and
+the cell was measured against a server carrying a different script and a different
+`--tool-choice-policy`. It recorded 9 model calls and 9 tool calls where the value is 3 and 3.
+
+**Why no gate saw it.** Every assertion in the suite compared artefacts to each other. The ledger
+and the results file agreed, because both were produced by the same contaminated run. Agreement
+between two outputs of one apparatus is not evidence about the apparatus.
+
+**Fix.** Ports come from the OS. `/health` reports pid, policy, loaded script turns and ledger
+depth. The caller asserts all of them, refuses a server with a non-empty ledger, and fails if its
+child exited rather than waiting out a timeout against a stranger's port. Proven by control: a
+foreign mock with the wrong policy is refused with the pid mismatch named. The logic lives in
+`mock_control.py` because the same defect existed in `harness.py` and was fixed in only one place
+first — see E7.
+
+**The general lesson.** Liveness is not identity. A measurement harness that shares a machine must
+assert *what* it is measuring against, and "I started a server on that port" is a different claim
+from "that server is mine".
+
+---
+
+## E7 — three of four fixes broke a neighbour
+
+**Status.** Found by an adversarial audit commissioned for exactly this, 2026-10-04, and fixed the
+same day. No published artefact carried any of it.
+
+Four fixes landed in `96ca72e`. Three created a new defect, and the pattern is worth more than the
+individual bugs.
+
+**The honour-mode fix made a sibling bug quieter.** `/reset` gained the ability to install a
+script, which was correct. But `harness.py` started its mock on a hardcoded port 9111 and accepted
+the first HTTP 200 as proof of ownership — the same defect as E6, left unfixed because it lived in
+a second copy of the logic. Before `/reset` installed scripts, a stranger on that port served its
+own script and the turn counts were visibly wrong. After, the correct script is installed into the
+wrong process, the new turn-count check passes, and the run proceeds against a server whose policy
+nobody chose. **A fix that converts a loud failure into a silent one is worse than the bug it
+closed.**
+
+**The scenario-name fix turned a silent wrong answer into a crash.** Normalising the comparison
+made `harness.py`'s rows matchable for the first time. Those rows carry no
+`consumed_at_ground_truth` — the harness writes nested `framework_reports`/`ground_truth` blocks —
+and the list branch of the loader had no guard where the dict branch had always had one. `report`
+after a default `run` died with `KeyError`. Reproduced by planting one row in the harness's own
+schema.
+
+**The precedence fix was defeated by naming.** Curated evidence was distinguished from scratch
+output by the `*-executed.json` filename, so a scratch file called anything-executed.json
+outranked the real rows, and a curated file without the suffix was demoted. It now discriminates on
+the `provenance` field the curated files carry and the harness never writes.
+
+**And the guard added by the fourth fix could not fire.** It compared the expected turn count
+against `script_turns_loaded`, which is the server echoing back the length of the payload just
+sent: a number compared to itself.
+
+**Two tests passed on reverted behaviour.** The honour-mode test asserted a constant existed in the
+source rather than driving the handler, so reverting the substitution left it green. The
+dependency-conflict test skipped when its subject artefact was absent, so deleting the headline
+file left the suite green. Both now fail under those mutations, checked by mutation rather than by
+reading.
+
+**What to take from it.** A fix is a change to a system, and the system includes the gate that was
+supposed to catch the original. Three of these four would have been caught by asking one question
+of each fix: what did this make newly reachable? The scenario fix made harness rows reachable; the
+`/reset` fix made a stranger configurable; the precedence fix made filenames load-bearing.
