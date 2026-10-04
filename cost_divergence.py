@@ -1,12 +1,13 @@
 """
 Cost Divergence Calculator — translates iteration/token divergence into real dollars.
 
-The same work (same LLM calls, same tokens) produces different COST REPORTS
+One declared comparison basis (the same LLM-call and token counts applied to every
+framework) produces different COST REPORTS
 depending on which framework's budget telemetry is used for billing/metering.
 
 This makes the abstract OTel divergence tangible. As an illustration only:
   "Framework A says you used 3 budget units, Framework B says 7.
-   At $0.03/unit, that's $0.09 vs $0.21 for the same work."
+   At $0.03/unit, that's $0.09 vs $0.21 on the same declared basis."
 That illustrative pair is a 2.33x spread (7/3); it is a worked example, not a
 measurement.
 
@@ -150,7 +151,7 @@ def print_cost_comparison(scenario: str, llm_calls: int, tool_calls: int,
     print()
     print(f"Cost range: ${min_cost:.4f} — ${max_cost:.4f}")
     print(f"Divergence ratio: {ratio:.1f}x")
-    print(f"Same work, same LLM, same tokens. {ratio:.1f}x cost difference in billing.")
+    print(f"One declared basis applied to every framework. {ratio:.1f}x cost difference in billing.")
 
 
 def print_monthly_projection(daily_agent_runs: int, llm_calls_per_run: int,
@@ -190,7 +191,8 @@ def print_monthly_projection(daily_agent_runs: int, llm_calls_per_run: int,
     spread = sorted_costs[-1][1] - sorted_costs[0][1]
     print(f"Monthly spread: ${spread:.2f}")
     print(f"Annual spread: ${spread * 12:.2f}")
-    print(f"This is ONLY from how iterations are counted. Same work. Same model.")
+    print("This is ONLY from how iterations are counted: one declared basis, one model,")
+    print("and the counting rule is the only thing that varies.")
 
 
 if __name__ == "__main__":

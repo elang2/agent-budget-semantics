@@ -17,7 +17,17 @@ Related project: [elang2/mcp-audit-gateway](https://github.com/elang2/mcp-audit-
 gen_ai.agent.iteration_budget.consumed = [3, 4, 5, 8]
 ```
 
-Same work. Same LLM calls. Same tokens consumed. Four different telemetry values across production frameworks. Setting `budget=3` means something fundamentally different depending on which framework is instrumented.
+One task, one declared budget of 3, four different telemetry values. Setting `budget=3` means
+something fundamentally different depending on which framework is instrumented.
+
+The shared basis is **declared, not executed**, and the difference matters. Every row above is
+scored against the same comparison workload — 4 LLM calls, 3 tool calls, 800 tokens — because that
+is the only way to put the counters side by side. What the frameworks actually consumed given the
+same task and the same limit is not the same at all, measured from the ledgers in
+`results/ledgers/S2-toolchoice-2026-10-04/`: openai-agents 3 calls and 525 tokens, Semantic Kernel
+and CrewAI 4 calls and 800, Agno 10 calls and 3505. That is a 6.7x spread in tokens actually
+spent under one declared budget, which is the cost consequence of the counting disagreement rather
+than a restatement of it.
 
 Adding the three rows that were not executed (Google ADK and Anthropic modelled, OpenAI Swarm archived) widens the spread to `[3, 4, 5, 8, 10]`. Those three values are model output, not observations, so the five-value set is not a set of answers to identical execution. The executed set is the four values above.
 
@@ -325,7 +335,7 @@ are derived from -- the table and the sentence are not the same denominator.
 | LangGraph | 8 | root → 4 llm → 3 tool | YES (consumed=8) |
 | Swarm | 8 | root → 4 llm → 3 tool | YES (consumed=10) |
 
-An alert threshold of `consumed > 3` fires for 6 of the 11 rows and not for 4, while 1 (Agno) emits no counter at all and so can neither fire nor stay silent. Same work, same tokens. Monitoring is framework-dependent, and a framework that reports nothing is invisible to the threshold rather than compliant with it. These counts are derived from `reports/report.json` and asserted by `tests/test_report_generation.py`.
+An alert threshold of `consumed > 3` fires for 6 of the 11 rows and not for 4, while 1 (Agno) emits no counter at all and so can neither fire nor stay silent. The counters above are scored against one declared comparison basis; tokens actually consumed ranged from 525 to 3505. Monitoring is framework-dependent, and a framework that reports nothing is invisible to the threshold rather than compliant with it. These counts are derived from `reports/report.json` and asserted by `tests/test_report_generation.py`.
 
 ## Use in CI
 

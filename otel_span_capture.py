@@ -192,7 +192,9 @@ def print_telemetry_comparison(scenario: str, llm_calls: int, tool_calls: int,
         print(f"{fw:<16} {span_count:<7} {consumed:<10} {util:<8.0%} {total_tokens:<14} {structure}")
 
     print()
-    print("Key insight: Same execution, same tokens, same tools.")
+    print("Key insight: one declared comparison basis -- 4 LLM calls, 3 tool calls --")
+    print("scored across frameworks. These spans are simulated from that basis, not")
+    print("captured; tokens actually consumed ranged from 525 to 3505 per framework.")
     print("Your Grafana/Datadog dashboard shows DIFFERENT numbers depending on")
     print("which framework generated the traces. Alert thresholds fire differently.")
     print("Cost attribution disagrees. SLOs measured against different baselines.")
