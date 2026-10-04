@@ -251,7 +251,7 @@ by `classify_mechanism()` in `experiments/S2_toolchoice_rerun.py` rather than as
 | openai-agents 0.22.0 | `local_stop` | no | Stopped at 3 LLM / 3 tool calls, `stopped_by: budget`. Sent `tool_choice` zero times and never withdrew `tools`. It does not ask; it stops. |
 | semantic-kernel 1.44.1 | `client_side_refusal` | no | Withdrew `tools` on its fourth request. The provider handed it a tool call anyway; it executed 3 of the 4 offered and returned a text answer. |
 | agno 1.2.5 | `cooperative_request` | **yes** | Sent `tool_choice: none` on 7 requests, all ignored, and executed all 9 tool calls offered. 10 LLM / 9 tool calls under a declared limit of 3. |
-| crewai 1.15.16 | unclassified | no | Its limit holds against the conformant provider at 4 LLM / 3 tool, `stopped_by: natural`. The mechanism is unclassified because the *non-compliant* run errors at this pinned version (a pydantic `TaskOutput.raw` validation error), so there is no evidence of whether it would refuse or merely ask. |
+| crewai 1.15.16 | unclassified | no | Its limit holds against the honouring provider at 4 LLM / 3 tool, `stopped_by: natural`. The mechanism is unclassified because the run against the *non-honouring* provider raises a pydantic `TaskOutput.raw` validation error, so there is no evidence of whether it would refuse or merely ask. **The error is not attributed to CrewAI.** `TaskOutput.raw` is handed a list of tool-call objects where it requires a string, which happens because this harness returns a scripted tool call on a request that carried no tools — so the error may be the harness's malformed response rather than a framework defect. Distinguishing the two needs a provider that returns well-formed text on that turn, which is what the honouring arm does, and there it does not error. |
 
 Under the **conformant** provider all four frameworks land on their declared limit:
 openai-agents 3/3, Semantic Kernel 4/3, Agno 4/3, CrewAI 4/3. That is the point. A conformant
@@ -290,6 +290,17 @@ git log --diff-filter=A --format='%h %cI %s' -- PREREGISTRATION-S2-tool-choice-2
 git log --diff-filter=A --format='%h %cI %s' -- results/S2-toolchoice-2026-10-04.json
 git merge-base --is-ancestor 803c3e8 68838b7 && echo "prediction precedes result"
 ```
+
+**Which frameworks were run, and which were not.** The pre-registration lists six frameworks
+installable at their pinned versions: agno, crewai, langgraph, llama-index-core, openai-agents and
+semantic-kernel. **Four were run.** LangGraph and LlamaIndex were left out for no reason recorded
+at the time, which is a selection this work cannot defend after the fact — stated here rather than
+left for a reader to notice, because a four-of-six subset chosen without a rule is the shape of
+cherry-picking whether or not it was.
+
+**CrewAI's two cells were added after the §4 predictions were committed**, so its results are
+exploratory and are excluded from every scorecard figure below. §4 predicts three frameworks
+across two provider modes, which is the six cells the 6-of-6 and 5-of-6 counts are taken over.
 
 **The score depends on which column you read, and both are reported here because that dependence
 is the finding.** The §4 table names its columns `actual_llm_calls` and `actual_tool_calls`, which

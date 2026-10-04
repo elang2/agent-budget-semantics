@@ -18,6 +18,7 @@ import asyncio
 import importlib
 import json
 import signal
+from typing import Optional
 import subprocess
 import sys
 import time
@@ -90,8 +91,25 @@ def start_mock_server(scenario_path: str) -> subprocess.Popen:
     raise RuntimeError("Mock LLM failed to start")
 
 
-def reset_mock():
-    httpx.post(f"{MOCK_URL}/reset")
+def reset_mock(scenario: Optional[dict] = None):
+    """Clear the ledger, and install this scenario's script if one is given.
+
+    Passing the scenario matters for `--all`: /reset used to clear only the
+    ledger and the script index, so every scenario after the first was served
+    from the first scenario's script and measured the wrong workload.
+    """
+    body = {"script": scenario.get("script", [])} if scenario else None
+    r = httpx.post(f"{MOCK_URL}/reset", json=body)
+    if scenario is not None:
+        loaded = (r.json() or {}).get("script_turns_loaded")
+        expected = len(scenario.get("script", []))
+        if loaded != expected:
+            raise SystemExit(
+                f"mock did not load this scenario's script: asked for {expected} "
+                f"turns, it reports {loaded}. Refusing to measure the wrong "
+                f"workload. An older mock without script-on-reset support will "
+                f"report null here."
+            )
 
 
 def get_ledger() -> list[dict]:
@@ -120,7 +138,7 @@ async def run_scenario(scenario_path: str, frameworks: list[str]) -> list[dict]:
         values_to_test = budget_configs.get("values_to_test", [3])
 
         for budget_value in values_to_test:
-            reset_mock()
+            reset_mock(scenario)
             time.sleep(0.05)
 
             print(f"  {framework} (budget={budget_value})...", end=" ", flush=True)

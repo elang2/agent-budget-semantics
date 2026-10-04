@@ -117,8 +117,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/chat/completions":
             self._handle_completions()
         elif self.path == "/reset":
+            # An optional body replaces the script as well as clearing the
+            # ledger. `reset()` alone clears LEDGER and SCRIPT_INDEX and leaves
+            # SCRIPT untouched, and harness.py only ever called /reset -- so
+            # `harness.py --all` served every scenario from whichever script the
+            # mock happened to be started with. A scenario runner that cannot
+            # install its own script is measuring the wrong scenario.
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            loaded = None
+            if length:
+                try:
+                    payload = json.loads(self.rfile.read(length))
+                except (ValueError, TypeError):
+                    self._respond(400, {"error": "reset body must be JSON"})
+                    return
+                if isinstance(payload, dict) and "script" in payload:
+                    if not isinstance(payload["script"], list):
+                        self._respond(400, {"error": "script must be a list"})
+                        return
+                    load_script(payload["script"])
+                    loaded = len(payload["script"])
             reset()
-            self._respond(200, {"status": "reset"})
+            self._respond(200, {"status": "reset", "script_turns_loaded": loaded,
+                                "script_turns_active": len(SCRIPT)})
         elif self.path == "/ledger":
             with LEDGER_LOCK:
                 self._respond(200, {"entries": LEDGER})

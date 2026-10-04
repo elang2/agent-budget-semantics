@@ -411,6 +411,18 @@ FRAMEWORK_VERSIONS = {
 }
 
 
+def _scenario_key(name) -> str:
+    """Normalise a scenario identifier for comparison.
+
+    "S2 - Budget Exhaustion" (what harness.py writes, from the scenario YAML's
+    `name`) and "S2-budget-exhaustion" (the slug every caller passes) are the
+    same scenario, and comparing them with `==` silently matched nothing.
+    """
+    if not name:
+        return ""
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
 def _load_harness_results(scenario: str) -> dict:
     """Load executed harness results. Returns {framework: result_dict}.
 
@@ -452,16 +464,35 @@ def _load_harness_results(scenario: str) -> dict:
             "the container as of 0.5.1.\n"
             "To generate a model-only report anyway, set ABS_ALLOW_MODELLED_ONLY=1."
         )
+    # harness.py writes the scenario's YAML `name` ("S2 - Budget Exhaustion")
+    # while every caller here passes the slug ("S2-budget-exhaustion"), so an
+    # equality test never matched and `report` after a `run` silently produced
+    # an all-modelled report. Compare on a normalised form instead: lowercase,
+    # non-alphanumerics collapsed. The guard below then refuses a zero-row
+    # match, which the previous no-directory-only guard could not see.
+    want = _scenario_key(scenario)
+    files_seen = 0
     executed = {}
-    for path in results_dir.glob("*.json"):
+    # Deterministic precedence, and the curated evidence wins. Making the
+    # scenario comparison work meant scratch `harness.py --output` files in
+    # results/ now match too, and glob order is filesystem-dependent, so a
+    # throwaway run could silently have overridden a curated reading in a
+    # published report. Curated `*-executed.json` files are read LAST so later
+    # assignment makes them authoritative, and both groups are sorted so two
+    # machines produce the same report from the same directory.
+    paths = sorted(results_dir.glob("*.json"))
+    ordered = ([q for q in paths if not q.name.endswith("-executed.json")]
+               + [q for q in paths if q.name.endswith("-executed.json")])
+    for path in ordered:
+        files_seen += 1
         try:
             data = json.loads(path.read_text())
             if isinstance(data, list):
                 for entry in data:
-                    if entry.get("scenario") == scenario:
+                    if _scenario_key(entry.get("scenario")) == want:
                         fw = entry["framework"]
                         executed[fw] = entry
-            elif isinstance(data, dict) and data.get("scenario") == scenario:
+            elif isinstance(data, dict) and _scenario_key(data.get("scenario")) == want:
                 if "frameworks" in data and isinstance(data["frameworks"], dict):
                     for fw, fw_data in data["frameworks"].items():
                         # Read whether the KEY is present, never whether its value is
@@ -506,6 +537,27 @@ def _load_harness_results(scenario: str) -> dict:
                     executed[data["framework"]] = data
         except (json.JSONDecodeError, KeyError):
             continue
+
+    # The guard that matters, and the one the earlier version could not see.
+    # It checked only that results/ existed and held some .json, which was true
+    # in exactly the state that produced a silently all-modelled report: a
+    # directory full of harness output whose scenario field matched nothing.
+    # Zero matched rows has the same consequence as an empty directory, so it
+    # raises for the same reason.
+    if not executed and not os.environ.get("ABS_ALLOW_MODELLED_ONLY"):
+        raise SystemExit(
+            f"no executed rows matched scenario {scenario!r}.\n"
+            f"Read {files_seen} JSON file(s) in {results_dir.resolve()} and none "
+            f"carried a matching scenario.\n\n"
+            "Every row would fall back to the prediction model and be labelled\n"
+            "'modeled', which silently replaces the executed readings. That\n"
+            "substitution is the one thing the validity contract exists to refuse.\n\n"
+            "If these are files `harness.py` wrote, check the scenario name: the\n"
+            "harness records the scenario YAML's `name` while the report asks for\n"
+            "the slug. Both forms are accepted now, so a mismatch here means a\n"
+            "genuinely different scenario.\n"
+            "To generate a model-only report anyway, set ABS_ALLOW_MODELLED_ONLY=1."
+        )
     return executed
 
 
