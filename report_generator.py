@@ -482,12 +482,28 @@ def _load_harness_results(scenario: str) -> dict:
     # machines produce the same report from the same directory.
     skipped_no_reading = []
     paths = sorted(results_dir.glob("*.json"))
-    ordered = ([q for q in paths if not q.name.endswith("-executed.json")]
-               + [q for q in paths if q.name.endswith("-executed.json")])
+
+    def _is_curated(q):
+        """Curated evidence declares `provenance`; harness output never does.
+
+        Discriminating on the filename was defeated by naming -- a scratch file
+        called anything-executed.json outranked the curated rows -- and it also
+        demoted any curated file without the suffix. harness.py and runners/
+        write no `provenance` key at all, so this separates exactly the real
+        threat. Unreadable files sort first and are skipped by the reader.
+        """
+        try:
+            d = json.loads(q.read_text())
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            return False
+        return isinstance(d, dict) and bool(d.get("provenance"))
+
+    ordered = ([q for q in paths if not _is_curated(q)]
+               + [q for q in paths if _is_curated(q)])
     for path in ordered:
-        files_seen += 1
         try:
             data = json.loads(path.read_text())
+            files_seen += 1
             if isinstance(data, list):
                 for entry in data:
                     if _scenario_key(entry.get("scenario")) != want:
@@ -547,7 +563,9 @@ def _load_harness_results(scenario: str) -> dict:
                         }
                 elif "framework" in data:
                     executed[data["framework"]] = data
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, UnicodeDecodeError, OSError):
+            # A non-UTF-8 or unreadable file in results/ must not take the
+            # report down, and must not be counted as read.
             continue
 
     # The guard that matters, and the one the earlier version could not see.

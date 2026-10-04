@@ -57,11 +57,15 @@ semantic-kernel and **violates crewai's `<3` cap**. Each cell in that file now r
 version and whether it sits inside that framework's declared range, because a result that does not
 name this cannot be replicated.
 
-This is the leading explanation for CrewAI's `TaskOutput.raw` validation error under the
-non-honouring provider. In openai v3 the tool-call type became a union and the concrete class was
-renamed to `ChatCompletionMessageFunctionToolCall`; the error reports exactly that class reaching a
-field typed as `str`. CrewAI 1.15.16 was written against the v2 shape. Pin `openai<3` to measure
-crewai inside its declared range, and note that doing so takes openai-agents out of its own.
+**This is a confound, not an established cause.** CrewAI's `TaskOutput.raw` validation error
+under the non-honouring provider happens in a cell that ran outside CrewAI's declared range, which
+is reason enough to disclose it and not reason enough to blame it. An earlier version of this
+paragraph asserted that the error came from an openai v3 rename, on the grounds that the error
+names `ChatCompletionMessageFunctionToolCall`. **That was wrong**: the class imports under openai
+2.54.0, measured in a clean venv, so it is not a v3 introduction and CrewAI could meet the same
+error inside its own declared range. Pin `openai<3` to measure crewai in range — which takes
+openai-agents out of its own, so it needs a separate environment — and only then is the question
+answerable. Not done.
 
 Install one line per framework, not all of them into one environment. Several
 pins conflict with each other across lines — `anthropic==0.39.0` on its own

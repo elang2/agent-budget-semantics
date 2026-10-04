@@ -127,12 +127,23 @@ def reset_mock(scenario: Optional[dict] = None):
     body = {"script": scenario.get("script", [])} if scenario else None
     r = httpx.post(f"{MOCK_URL}/reset", json=body)
     if scenario is not None:
-        loaded = (r.json() or {}).get("script_turns_loaded")
+        # `script_turns_active` is len(SCRIPT) AFTER the load -- the server's
+        # actual state. `script_turns_loaded` is the server echoing back
+        # len(payload["script"]), i.e. the number we just sent, so comparing
+        # `expected` against it compared a number to itself and the guard could
+        # never fire. Found by audit, not by the guard.
+        body_json = r.json() or {}
+        loaded = body_json.get("script_turns_active")
         expected = len(scenario.get("script", []))
+        if not expected:
+            raise SystemExit(
+                "this scenario has no `script` turns; the mock would answer every "
+                "request with 'Script exhausted.' and the run would measure nothing"
+            )
         if loaded != expected:
             raise SystemExit(
                 f"mock did not load this scenario's script: asked for {expected} "
-                f"turns, it reports {loaded}. Refusing to measure the wrong "
+                f"turns, the server reports {loaded} active. Refusing to measure the "
                 f"workload. An older mock without script-on-reset support will "
                 f"report null here."
             )

@@ -128,16 +128,53 @@ class TestHonourModeReturnsRealText:
         return mod
 
     def test_honour_never_returns_an_empty_final_answer(self):
-        mod = self._serve("honour", tools_present=False)
-        # Exercise the same branch the handler takes: no tools present.
-        scripted = mod.get_next_response()
-        assert scripted.get("content") is None, "fixture must start with null content"
-        # The handler substitutes non-empty text; assert the constant exists
-        # and is non-empty rather than re-implementing the handler here.
-        src = pathlib.Path("mock-llm/server.py").read_text()
-        assert "HONOURED_CONTENT" in src
-        marker = src.split("HONOURED_CONTENT = (", 1)[1].split(")", 1)[0]
-        assert "Final answer" in marker and len(marker.strip()) > 20
+        """Exercise the HANDLER over HTTP, not the presence of a constant.
+
+        The previous version asserted `HONOURED_CONTENT` existed in the source,
+        which stayed green when the substitution itself was reverted. A test
+        that cannot see the behaviour it guards is the defect this file exists
+        to document.
+        """
+        import json as _json
+        import subprocess, sys, time, urllib.request
+        from mock_control import free_port
+        for policy, want_content in (("honour", True), ("ignore", False)):
+            port = free_port()
+            proc = subprocess.Popen(
+                [sys.executable, "mock-llm/server.py", f"--port={port}",
+                 "--script=scenarios/S2-budget-exhaustion.yaml",
+                 f"--tool-choice-policy={policy}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                for _ in range(40):
+                    try:
+                        urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.4)
+                        break
+                    except Exception:
+                        time.sleep(0.2)
+                else:
+                    pytest.skip("mock never came up")
+                # A request with NO tools: the honour branch's second trigger.
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/v1/chat/completions",
+                    data=_json.dumps({"model": "m", "messages": [
+                        {"role": "user", "content": "x"}]}).encode(),
+                    headers={"Content-Type": "application/json"})
+                ch = _json.loads(urllib.request.urlopen(req, timeout=5).read())["choices"][0]
+                if want_content:
+                    assert ch["finish_reason"] == "stop", ch
+                    assert ch["message"].get("content"), (
+                        "honour mode returned an empty final answer, which is the "
+                        "ERRATA E5 defect: CrewAI reads it as an unfinished task "
+                        "and retries")
+                    assert not ch["message"].get("tool_calls")
+                else:
+                    assert ch["finish_reason"] == "tool_calls", ch
+                    assert ch["message"].get("tool_calls"), (
+                        "ignore mode must still hand back the scripted tool call, "
+                        "or every recorded result changes counterparty")
+            finally:
+                proc.kill()
 
     def test_ignore_mode_still_returns_the_tool_call(self):
         src = pathlib.Path("mock-llm/server.py").read_text()
@@ -165,9 +202,25 @@ class TestResetInstallsAScript:
     def test_harness_passes_the_scenario_and_verifies_the_load(self):
         src = pathlib.Path("harness.py").read_text()
         assert "reset_mock(scenario)" in src, "harness must install each scenario's script"
-        assert "Refusing to measure the wrong" in src, (
-            "a silent load failure is the same defect one level down"
-        )
+        body = src.split("def reset_mock", 1)[1].split("\ndef ", 1)[0]
+        # The invariant, not the wording. Comparing against
+        # `script_turns_loaded` compares our own echoed number to itself, so
+        # the guard could never fire; `script_turns_active` is len(SCRIPT)
+        # after the load, which is the server's actual state.
+        assert "script_turns_active" in body, (
+            "the load check must compare the server's post-load state, not the "
+            "turn count it echoes back from our own request")
+        assert 'get("script_turns_loaded")' not in body, (
+            "comparing the echoed value is a guard that cannot fire")
+
+    def test_reset_rejects_a_scenario_with_no_script(self):
+        """An absent or misspelled `script` key yields expected=0, the mock
+        loads nothing, 0 == 0 passes, and every request is answered
+        'Script exhausted.' while the run reports success."""
+        src = pathlib.Path("harness.py").read_text()
+        body = src.split("def reset_mock", 1)[1].split("\ndef ", 1)[0]
+        assert "if not expected" in body, (
+            "an empty workload must be refused, not measured")
 
 
 class TestScenarioKeysDoNotCollide:
@@ -206,9 +259,10 @@ class TestOpenAISdkConflictIsRecorded:
     def test_every_cell_records_the_sdk_version_and_range_compliance(self):
         import json, pathlib
         p = pathlib.Path("results/S2-toolchoice-2026-10-04.json")
-        if not p.exists():
-            import pytest
-            pytest.skip("toolchoice results not present")
+        assert p.exists(), (
+            "the headline artefact is missing. This used to skip, so deleting "
+            "the file left the suite green -- a gate that disappears with its "
+            "subject proves nothing")
         cells = json.loads(p.read_text())["cells"]
         assert cells, "no cells to check"
         for name, cell in cells.items():
