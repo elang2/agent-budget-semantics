@@ -140,9 +140,10 @@ executed-only set; `python otel_comparison.py` prints that larger view.
 ## Impact on OTel Semantic Conventions
 
 PR #439, which proposed a shared iteration_budget attribute set, was
-closed on 2026-08-27 after maintainer review concluded that a single
-attribute cannot represent divergent counting semantics across
-frameworks in a comparable way. Without mandatory counting-semantics
+closed by its author on 2026-08-27 after the reviewing maintainer
+concluded that a single attribute cannot represent divergent counting
+semantics across frameworks in a comparable way, with or without a unit
+travelling with the count. Without mandatory counting-semantics
 metadata (or, alternatively, framework-specific attribute names), a
 shared budget attribute is:
 

@@ -44,7 +44,7 @@ Tier legend: **modeled** = counting logic derived from source code analysis at p
 **executed** = the harness ran this framework against the mock LLM. It is a statement about whether the run happened and carries no claim that the observed value matched the prediction; see `matched` for that, which held for 4 of the 7 informative rows. Agno ran and is `executed`, and emitted no counter, so it is `status: uninformative` and outside that denominator.
 **archived** = framework is experimental/not production (OpenAI Swarm).
 
-† The "`budget=3` means" column is validated by execution for rows marked `executed` (scenario S2). ‡ "Parallel 3 tools," "Error retry," and "Final answer" columns are derived from source-code analysis for all frameworks (scenarios S4/S5 not yet executed). These will upgrade to executed once the harness validates them.
+† The "`budget=3` means" column is validated by execution for rows marked `executed` (scenario S2). ‡ "Parallel 3 tools," "Error retry," and "Final answer" columns are derived from source-code analysis for all frameworks. S4 (parallel tools) and S5 (error retry) have since been executed for four frameworks each -- langchain, langgraph, semantic_kernel and autogen -- in `results/S4-executed.json` and `results/S5-executed.json`. Those two files sit OUTSIDE the per-cell validity contract: no row in either carries a `unit_observed` or a counter, so no row can adjudicate a prediction, and their `provenance: executed` says only that the run happened. The columns here are therefore still the source reading for every framework, and the remaining seven have not been run on S4 or S5 at all.
 
 ## Install
 
@@ -270,6 +270,10 @@ One workload, different dashboard. The span counts and structures below are
 captured from a live OTel exporter, so they are a projection of what each
 framework's instrumentation would emit rather than a recording of what it did:
 
+Five of the eleven rows are shown, chosen to span the distinct span structures. The
+other six are in `reports/divergence-matrix.md`, which is where the 6/4/1 counts below
+are derived from -- the table and the sentence are not the same denominator.
+
 | Framework | Spans emitted | Structure | Alert at consumed>3? |
 |-----------|--------------|-----------|----------------------|
 | LangChain | 6 | root → 4 llm → 1 batch | NO (consumed=3) |
@@ -361,13 +365,13 @@ Testing revealed three fundamentally different approaches to budget enforcement:
 
 This project provides empirical evidence for the budget governance discussion in the OpenTelemetry semantic conventions. The finding is a negative one, and it is the result rather than a setback: a cross-framework `gen_ai.agent.iteration_budget.consumed` should not be named at all, because the counts frameworks report for one execution are not measurements of the same quantity.
 
-An earlier revision of this section proposed a mandatory `counting_method` enum — `llm_calls | tool_cycles | graph_nodes | messages` — as the fix. That proposal does not survive its own evidence, and the project no longer holds it. Spec PR #439 carried the attribute set and was withdrawn on 2026-08-27 after maintainer review concluded the values are not comparable across implementations whether or not a unit travels with them. Tagging a count with the unit that produced it makes the unit legible; it does not make two differently-counted numbers addable, comparable in a dashboard, or safe as an alert threshold, which were the use cases the attribute existed to serve.
+An earlier revision of this section proposed a mandatory `counting_method` enum — `llm_calls | tool_cycles | graph_nodes | messages` — as the fix. That proposal does not survive its own evidence, and the project no longer holds it. Spec PR #439 carried the attribute set and was closed by its own author on 2026-08-27T05:41:48Z, ninety-seven minutes after the reviewing maintainer concluded that the values are not comparable across implementations whether or not a unit travels with them: "With or without unit these numbers are not comparable. It can only be captured in framework-specific way like openai.agent.max_invocations" ([issuecomment-5434220283](https://github.com/open-telemetry/semantic-conventions-genai/pull/439#issuecomment-5434220283), 2026-08-27T04:04:03Z). The proposal was withdrawn on the strength of the evidence submitted in support of it. Tagging a count with the unit that produced it makes the unit legible; it does not make two differently-counted numbers addable, comparable in a dashboard, or safe as an alert threshold, which were the use cases the attribute existed to serve.
 
 Two directions remain consistent with that closure, and neither is a shared `consumed` attribute. Framework-specific names such as `openai.agent.max_turns` or `langchain.agent.max_iterations` fix the counting semantics by definition, which is the direction the review converged toward. Alternatively, `iteration_budget.limit` may be recorded verbatim, as the framework was configured, with no cross-framework normalization attempted.
 
 Related PRs/Issues:
 - open-telemetry/semantic-conventions-genai #425 (parent issue — budget governance attributes for invoke_agent)
-- open-telemetry/semantic-conventions-genai #439 (spec PR carrying the four attributes; closed 2026-08-27 after maintainer review concluded that divergent counting semantics across frameworks make a single shared attribute difficult to define; continuation of #426)
+- open-telemetry/semantic-conventions-genai #439 (spec PR carrying the four attributes; continuation of #426; opened 2026-08-07T04:58:10Z, closed by its author 2026-08-27T05:41:48Z after the reviewing maintainer concluded that divergent counting semantics across frameworks cannot be captured in a single shared attribute, with or without a unit)
 - open-telemetry/semantic-conventions-genai #451 (turn count)
 - open-telemetry/semantic-conventions-genai #447 (agent delegation)
 - open-telemetry/semantic-conventions-genai #476 (retry counting — transferred from semantic-conventions#4025)
