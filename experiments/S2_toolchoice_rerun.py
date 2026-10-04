@@ -43,6 +43,42 @@ def ledger(port):
     return d if isinstance(d, list) else d.get("entries", d.get("ledger", []))
 
 
+def _openai_version():
+    try:
+        return md.version("openai")
+    except Exception:
+        return None
+
+
+def _within_declared_range(fw):
+    """Is the installed openai SDK inside this framework's declared range?
+
+    True, False, or None when the framework states no unconditional
+    constraint. Read from the framework's own metadata rather than hardcoded,
+    so a dependency bump changes the answer instead of silently invalidating
+    it.
+    """
+    try:
+        from packaging.requirements import Requirement
+        from packaging.version import Version
+    except Exception:
+        return None
+    got = _openai_version()
+    if got is None:
+        return None
+    for raw in (md.requires(DIST[fw]) or []):
+        try:
+            req = Requirement(raw)
+        except Exception:
+            continue
+        if req.name.lower() != "openai" or req.marker is not None:
+            continue
+        if not str(req.specifier):
+            continue
+        return bool(req.specifier.contains(Version(got), prereleases=True))
+    return None
+
+
 def classify_mechanism(cells):
     """Classify each framework's stop mechanism from its own ledgers.
 
@@ -129,6 +165,14 @@ def summarise(fw, policy, led, r, err=None):
     out = dict(
         framework=fw,
         framework_version=md.version(DIST[fw]),
+        # The openai SDK is a shared transitive dependency that these
+        # frameworks constrain INCOMPATIBLY -- openai-agents 0.22.0 wants
+        # openai>=3,<4 while crewai 1.15.16 wants >=2.30,<3 -- so no single
+        # environment satisfies both, and the resolved version decides which
+        # framework is inside its declared support range. Recorded per cell
+        # because a result that does not name it cannot be replicated.
+        openai_sdk_version=_openai_version(),
+        openai_sdk_within_framework_declared_range=_within_declared_range(fw),
         mock_tool_choice_policy=policy,
         ledger_llm_calls=len(led),
         ledger_tool_calls=sum(e.get("tool_calls_requested") or 0 for e in led),

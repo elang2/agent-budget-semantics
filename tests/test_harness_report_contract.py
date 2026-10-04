@@ -168,3 +168,82 @@ class TestResetInstallsAScript:
         assert "Refusing to measure the wrong" in src, (
             "a silent load failure is the same defect one level down"
         )
+
+
+class TestScenarioKeysDoNotCollide:
+    def test_no_two_scenario_files_share_a_key(self):
+        """A normaliser that collapses distinct scenarios would silently merge
+        their rows, which is the same class of defect as the equality test that
+        matched nothing."""
+        import collections, glob, pathlib, yaml
+        keys = collections.defaultdict(set)
+        files = sorted(glob.glob("scenarios/*.yaml"))
+        assert len(files) >= 3, f"only {len(files)} scenario files found; walker is wrong"
+        for f in files:
+            slug = pathlib.Path(f).stem
+            name = (yaml.safe_load(pathlib.Path(f).read_text()) or {}).get("name")
+            keys[_scenario_key(slug)].add(f)
+            if name:
+                keys[_scenario_key(name)].add(f)
+        collisions = {k: v for k, v in keys.items() if len(v) > 1}
+        assert not collisions, f"scenario keys collide across files: {collisions}"
+
+    def test_absent_scenario_never_matches_a_real_one(self):
+        for empty in (None, ""):
+            assert _scenario_key(empty) == ""
+            assert _scenario_key(empty) != _scenario_key("S2-budget-exhaustion")
+
+
+class TestOpenAISdkConflictIsRecorded:
+    """openai-agents and crewai constrain the openai SDK incompatibly.
+
+    openai-agents 0.22.0 wants >=3,<4; crewai 1.15.16 wants >=2.30,<3. No
+    single environment satisfies both, so a run covering both is outside at
+    least one framework's declared range by construction, and a result that
+    does not name the resolved version cannot be replicated.
+    """
+
+    def test_every_cell_records_the_sdk_version_and_range_compliance(self):
+        import json, pathlib
+        p = pathlib.Path("results/S2-toolchoice-2026-10-04.json")
+        if not p.exists():
+            import pytest
+            pytest.skip("toolchoice results not present")
+        cells = json.loads(p.read_text())["cells"]
+        assert cells, "no cells to check"
+        for name, cell in cells.items():
+            assert "openai_sdk_version" in cell, f"{name} does not record the SDK version"
+            assert "openai_sdk_within_framework_declared_range" in cell, (
+                f"{name} does not record whether the SDK is in range")
+
+    def test_the_conflict_is_real_and_documented(self):
+        """Read from package metadata, so this fails if the constraint changes."""
+        import importlib.metadata as md
+        import pathlib
+        try:
+            from packaging.requirements import Requirement
+        except ImportError:
+            import pytest
+            pytest.skip("packaging not available")
+        spec = {}
+        for dist in ("openai-agents", "crewai"):
+            try:
+                reqs = md.requires(dist) or []
+            except md.PackageNotFoundError:
+                import pytest
+                pytest.skip(f"{dist} not installed")
+            for raw in reqs:
+                try:
+                    r = Requirement(raw)
+                except Exception:
+                    continue
+                if r.name.lower() == "openai" and r.marker is None and str(r.specifier):
+                    spec[dist] = str(r.specifier)
+        if len(spec) == 2:
+            assert spec["openai-agents"] != spec["crewai"], (
+                "the two constraints are now identical; if the conflict is gone, "
+                "PINS.md's note and the README's CrewAI attribution must be revised"
+            )
+            pins = pathlib.Path("PINS.md").read_text()
+            assert "openai" in pins and "incompatibl" in pins.lower(), (
+                "PINS.md must document the shared-dependency conflict")

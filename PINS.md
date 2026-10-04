@@ -40,6 +40,29 @@ pip install llama-index-core==0.14.24 llama-index-llms-openai==0.7.10
 pip install agno==1.2.5
 ```
 
+**The `openai` SDK is a shared transitive dependency and these frameworks constrain it
+incompatibly.** Read from each package's own metadata on 2026-10-04:
+
+| framework | declares |
+|---|---|
+| `openai-agents==0.22.0` | `openai>=3.0.0,<4` |
+| `crewai==1.15.16` | `openai>=2.30.0,<3` |
+| `semantic-kernel==1.44.1` | `openai>=2.0.0` |
+| `agno==1.2.5` | `openai` only as an extra, unconstrained |
+
+**No single environment satisfies openai-agents and crewai**, so a run covering both is outside at
+least one framework's declared range by construction. The environment that produced
+`results/S2-toolchoice-2026-10-04.json` resolved `openai==3.8.0`, which satisfies openai-agents and
+semantic-kernel and **violates crewai's `<3` cap**. Each cell in that file now records the resolved
+version and whether it sits inside that framework's declared range, because a result that does not
+name this cannot be replicated.
+
+This is the leading explanation for CrewAI's `TaskOutput.raw` validation error under the
+non-honouring provider. In openai v3 the tool-call type became a union and the concrete class was
+renamed to `ChatCompletionMessageFunctionToolCall`; the error reports exactly that class reaching a
+field typed as `str`. CrewAI 1.15.16 was written against the v2 shape. Pin `openai<3` to measure
+crewai inside its declared range, and note that doing so takes openai-agents out of its own.
+
 Install one line per framework, not all of them into one environment. Several
 pins conflict with each other across lines — `anthropic==0.39.0` on its own
 line against the newer `anthropic` that `crewai==1.15.16` resolves to, for
