@@ -241,15 +241,25 @@ def generate_framework_cards(scenario: str = "S2-budget-exhaustion") -> str:
             observed_param = row.get("budget_param")
             if observed_param and observed_param != semantics.get("budget_param"):
                 lines.append(f"| Budget Param As Run | `{observed_param}` |")
+            # `enforced` is NOT an observation. No code in runners/ or
+            # harness.py produces it -- grep returns nothing -- so it is the
+            # author's classification of the row, exactly like
+            # counter_at_budget_stop and unit_observed. Labelling it
+            # "Enforcement observed" would make a judgement look like a
+            # reading, which is the defect this whole report suite exists to
+            # avoid. The measured mechanism lives in
+            # results/S2-toolchoice-2026-10-04.json under `mechanisms`, which
+            # is derived from per-request ledgers.
             enforced = row.get("enforced")
             if enforced is False:
-                lines.append("| Enforcement observed | **NOT ENFORCED** — see "
-                             "results/S2-toolchoice-2026-10-04.json for both "
-                             "provider conditions |")
+                lines.append("| Enforcement (author classification) | limit did not hold "
+                             "in the recorded run — mechanism measured in "
+                             "results/S2-toolchoice-2026-10-04.json |")
             elif enforced is True:
-                lines.append("| Enforcement observed | enforced |")
+                lines.append("| Enforcement (author classification) | limit held in the "
+                             "recorded run |")
             else:
-                lines.append("| Enforcement observed | not recorded for this row |")
+                lines.append("| Enforcement (author classification) | not classified |")
         lines.append("")
 
     return "\n".join(lines)

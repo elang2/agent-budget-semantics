@@ -634,12 +634,26 @@ class TestReadmeFiguresTrackTheReport:
             if row.get("enforced") is not False:
                 continue
             assert fw in sections, f"no card section for executed framework {fw!r}"
-            assert "NOT ENFORCED" in sections[fw], (
-                f"{fw} is enforced=false in the data but its card does not say "
-                "NOT ENFORCED"
+            card = sections[fw]
+            # Substance, not a fixed phrase: the card must say the limit did
+            # not hold, and must attribute that to the author rather than to
+            # an observation, because `enforced` has no producing code path in
+            # runners/ or harness.py. An earlier version of this test required
+            # the literal "NOT ENFORCED", which would have blocked exactly
+            # that correction.
+            assert "limit did not hold" in card, (
+                f"{fw} is enforced=false in the data but its card does not say the "
+                f"limit did not hold"
+            )
+            assert "author classification" in card, (
+                f"{fw}'s card presents enforcement as observed; no code produces "
+                f"the `enforced` field, so it must be labelled a classification"
+            )
+            assert "Enforcement observed" not in card, (
+                f"{fw}'s card calls a classification an observation"
             )
             assert re.search(rf"^\|\s*{re.escape(fw)}\s*\|.*NOT ENFORCED", matrix,
-                             re.M), f"{fw} row in the matrix does not say NOT ENFORCED"
+                             re.M), f"{fw} row in the matrix does not flag the limit"
             checked += 1
         assert checked >= 1, (
             "no framework has enforced=false, so this test adjudicated nothing; "

@@ -43,6 +43,81 @@ def ledger(port):
     return d if isinstance(d, list) else d.get("entries", d.get("ledger", []))
 
 
+def classify_mechanism(cells):
+    """Classify each framework's stop mechanism from its own ledgers.
+
+    Derived, not asserted. The point of R6 is that "declared" versus
+    "enforced" is not a binary: what separates these frameworks is how much
+    their limit depends on the counterparty cooperating. Three signals, all
+    read from the ledger:
+
+      - withdraws_tools: did the framework stop advertising `tools`?
+      - signals_tool_choice_none: did it ask the provider to stop instead?
+      - declined_offered_call: was it handed a tool call it did not execute?
+
+    The third is the one that distinguishes a real refusal from a request,
+    and it is only observable against a provider that ignores the first two
+    -- which is why the non-compliant mock is the stressor rather than a
+    confound.
+    """
+    out = {}
+    for fw in sorted({c["framework"] for c in cells.values()}):
+        ig = cells.get(f"{fw}/ignore")
+        ho = cells.get(f"{fw}/honour")
+        if ig is None:
+            continue
+        withdraws = ig["requests_with_tools_absent_or_empty"] > 0
+        signals = ig["requests_sending_tool_choice_none"] > 0
+        offered = ig["ledger_tool_calls"]
+        executed = ig["framework_reported_tool_calls"]
+        declined = (
+            None if executed is None else max(0, offered - executed)
+        )
+
+        if ig["stopped_by"] == "error" or ig.get("error"):
+            # A framework that crashed did not decide anything. Counting an
+            # unexecuted tool call as a refusal would credit a traceback with
+            # enforcement, which is the same error as reading a null counter
+            # as a zero.
+            mechanism = "unclassifiable_run_errored"
+            note = (f"run errored under the non-compliant provider "
+                    f"(stopped_by={ig['stopped_by']!r}), so the "
+                    f"{declined if declined else 0} unexecuted tool call(s) are not "
+                    f"evidence of a refusal")
+        elif declined:
+            mechanism = "client_side_refusal"
+            note = (f"declined {declined} of {offered} tool call(s) the "
+                    f"non-compliant provider offered")
+        elif not withdraws and not signals:
+            mechanism = "local_stop"
+            note = ("stopped without signalling the provider at all; sent no "
+                    "tool_choice and never withdrew tools")
+        elif signals:
+            mechanism = "cooperative_request"
+            note = ("asked the provider to stop via tool_choice=none and "
+                    "executed what came back anyway")
+        else:
+            mechanism = "withdrew_tools_only"
+            note = "stopped advertising tools but was not tested by an offered call"
+
+        out[fw] = {
+            "mechanism": mechanism,
+            "counterparty_dependent": (
+                None if mechanism == "unclassifiable_run_errored"
+                else mechanism == "cooperative_request"),
+            "note": note,
+            "withdraws_tools": withdraws,
+            "signals_tool_choice_none": signals,
+            "tool_calls_offered_under_noncompliant_provider": offered,
+            "tool_calls_executed_under_noncompliant_provider": executed,
+            "tool_calls_declined": declined,
+            "stopped_by_under_noncompliant_provider": ig["stopped_by"],
+            "ledger_calls_ignore_vs_honour": [
+                ig["ledger_llm_calls"], ho["ledger_llm_calls"] if ho else None],
+        }
+    return out
+
+
 def summarise(fw, policy, led, r, err=None):
     # The two honour triggers, separated. An entry is attributed to
     # tool_choice only when `tool_choice_received == "none"`; everything else
@@ -147,6 +222,24 @@ async def main():
                                   "framework's internal counter, so a field named for one "
                                   "would be the author's model rather than a reading.",
         },
+        "mechanism_schema": {
+            "purpose": "R6 states that a declared budget is not an enforced budget. "
+                       "These rows say what each framework's limit actually rests on, "
+                       "derived from its own ledgers by classify_mechanism() rather "
+                       "than assigned by hand. There is no `enforced` boolean here: "
+                       "results/S2-executed.json has one and no code produces it.",
+            "local_stop": "Stopped without signalling the provider. The limit does not "
+                          "depend on the counterparty at all.",
+            "client_side_refusal": "Was handed a tool call by the non-compliant provider "
+                                   "and did not execute it. The limit holds against a "
+                                   "counterparty that ignores it.",
+            "cooperative_request": "Asked the provider to stop via tool_choice=none and "
+                                   "executed what came back. The limit holds only if the "
+                                   "counterparty cooperates.",
+            "why_two_policies": "Only the non-compliant provider can distinguish a refusal "
+                                "from a request, because a conformant one satisfies both.",
+        },
+        "mechanisms": classify_mechanism(out),
         "cells": out,
     }
     pathlib.Path("results/S2-toolchoice-2026-10-04.json").write_text(

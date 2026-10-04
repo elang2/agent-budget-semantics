@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "executed_at": "2026-10-04T02:36:37+00:00",
+  "executed_at": "2026-10-04T03:07:01+00:00",
   "preregistration": "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
   "driver": "experiments/S2_toolchoice_rerun.py",
   "mock_server": "mock-llm/server.py with scenarios/S2-budget-exhaustion.yaml (10 turns: 9 tool + 1 text), run once per cell",
@@ -18,6 +18,75 @@
     "honoured_via_tools_absent": "entries the mock honoured because `tools` was absent or empty. Observed. This is a SECOND and independent trigger in server.py; an aggregate `honoured` count conflates the two, and a cell whose honour count comes only from this trigger carries no evidence about tool_choice at all.",
     "ledger_path": "the persisted ledger this row was computed from.",
     "no_modelled_fields": "This file deliberately carries no counter_at_budget_stop, unit_observed or mock_confirmed_calls. No runner reads a framework's internal counter, so a field named for one would be the author's model rather than a reading."
+  },
+  "mechanism_schema": {
+    "purpose": "R6 states that a declared budget is not an enforced budget. These rows say what each framework's limit actually rests on, derived from its own ledgers by classify_mechanism() rather than assigned by hand. There is no `enforced` boolean here: results/S2-executed.json has one and no code produces it.",
+    "local_stop": "Stopped without signalling the provider. The limit does not depend on the counterparty at all.",
+    "client_side_refusal": "Was handed a tool call by the non-compliant provider and did not execute it. The limit holds against a counterparty that ignores it.",
+    "cooperative_request": "Asked the provider to stop via tool_choice=none and executed what came back. The limit holds only if the counterparty cooperates.",
+    "why_two_policies": "Only the non-compliant provider can distinguish a refusal from a request, because a conformant one satisfies both."
+  },
+  "mechanisms": {
+    "agno": {
+      "mechanism": "cooperative_request",
+      "counterparty_dependent": true,
+      "note": "asked the provider to stop via tool_choice=none and executed what came back anyway",
+      "withdraws_tools": false,
+      "signals_tool_choice_none": true,
+      "tool_calls_offered_under_noncompliant_provider": 9,
+      "tool_calls_executed_under_noncompliant_provider": 9,
+      "tool_calls_declined": 0,
+      "stopped_by_under_noncompliant_provider": "completed",
+      "ledger_calls_ignore_vs_honour": [
+        10,
+        4
+      ]
+    },
+    "crewai": {
+      "mechanism": "unclassifiable_run_errored",
+      "counterparty_dependent": null,
+      "note": "run errored under the non-compliant provider (stopped_by='error'), so the 1 unexecuted tool call(s) are not evidence of a refusal",
+      "withdraws_tools": true,
+      "signals_tool_choice_none": false,
+      "tool_calls_offered_under_noncompliant_provider": 4,
+      "tool_calls_executed_under_noncompliant_provider": 3,
+      "tool_calls_declined": 1,
+      "stopped_by_under_noncompliant_provider": "error",
+      "ledger_calls_ignore_vs_honour": [
+        4,
+        10
+      ]
+    },
+    "openai_agents": {
+      "mechanism": "local_stop",
+      "counterparty_dependent": false,
+      "note": "stopped without signalling the provider at all; sent no tool_choice and never withdrew tools",
+      "withdraws_tools": false,
+      "signals_tool_choice_none": false,
+      "tool_calls_offered_under_noncompliant_provider": 3,
+      "tool_calls_executed_under_noncompliant_provider": 3,
+      "tool_calls_declined": 0,
+      "stopped_by_under_noncompliant_provider": "budget",
+      "ledger_calls_ignore_vs_honour": [
+        3,
+        3
+      ]
+    },
+    "semantic_kernel": {
+      "mechanism": "client_side_refusal",
+      "counterparty_dependent": false,
+      "note": "declined 1 of 4 tool call(s) the non-compliant provider offered",
+      "withdraws_tools": true,
+      "signals_tool_choice_none": false,
+      "tool_calls_offered_under_noncompliant_provider": 4,
+      "tool_calls_executed_under_noncompliant_provider": 3,
+      "tool_calls_declined": 1,
+      "stopped_by_under_noncompliant_provider": "completed",
+      "ledger_calls_ignore_vs_honour": [
+        4,
+        4
+      ]
+    }
   },
   "cells": {
     "agno/ignore": {

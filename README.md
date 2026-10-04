@@ -224,38 +224,46 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 **Unique `consumed` values: `[3, 4, 5, 8, 10]`** across all eleven rows, of which `[3, 4, 5, 8]` is the executed set. The 10 comes from OpenAI Swarm, which is archived and was never run, so it is a modelled value and the five-value set is not five answers to identical execution.
 Executed results in `results/S2-executed.json`.
 
-#### What `NOT ENFORCED` means for Agno 1.2.5, measured under two providers
+#### Enforcement is not a boolean: three mechanisms, measured under two providers
 
-Agno's `tool_call_limit` is enforced **cooperatively**. On reaching the limit it sets
-`tool_choice="none"` for subsequent requests and breaks out of the current batch
-(`agno/models/base.py:886` in `run_function_calls` and `:997` in `arun_function_calls`). It has
-no client-side refusal: if the provider returns a tool call anyway, Agno executes it.
+"Enforced" and "not enforced" are the wrong two categories. What separates these frameworks is
+**how much their limit depends on the counterparty cooperating**, and that is only visible against
+a provider that declines to cooperate. Each framework was run twice against the same pinned
+version: once against a mock that never reads `tool_choice` or an absent `tools` array, and once
+against one that honours both. Every figure below is read from a per-request ledger in
+`results/ledgers/S2-toolchoice-2026-10-04/`, and the classification is derived from those ledgers
+by `classify_mechanism()` in `experiments/S2_toolchoice_rerun.py` rather than assigned by hand.
 
-So the behaviour depends on the counterparty, and both conditions were run against the same
-pinned version. The figures below are ledger readings, and the per-request ledgers are in
-`results/ledgers/S2-toolchoice-2026-10-04/`.
+| Framework | Mechanism | Depends on provider | What the ledger shows under a provider that ignores the limit |
+|---|---|---|---|
+| openai-agents 0.22.0 | `local_stop` | no | Stopped at 3 LLM / 3 tool calls, `stopped_by: budget`. Sent `tool_choice` zero times and never withdrew `tools`. It does not ask; it stops. |
+| semantic-kernel 1.44.1 | `client_side_refusal` | no | Withdrew `tools` on its fourth request. The provider handed it a tool call anyway; it executed 3 of the 4 offered and returned a text answer. |
+| agno 1.2.5 | `cooperative_request` | **yes** | Sent `tool_choice: none` on 7 requests, all ignored, and executed all 9 tool calls offered. 10 LLM / 9 tool calls under a declared limit of 3. |
+| crewai 1.15.16 | unclassifiable | — | The run errors at this pinned version (a pydantic `TaskOutput.raw` validation error), so its one unexecuted tool call is not evidence of a refusal. |
 
-| Mock provider | LLM calls | Tool calls | `tool_choice: none` sent | Limit held |
-|---|---|---|---|---|
-| ignores `tool_choice` | 10 | 9 | 7, all ignored | no |
-| honours `tool_choice` | 4 | 3 | 1, honoured | yes |
+Under the **conformant** provider all three classified frameworks land on their declared limit:
+openai-agents 3/3, Semantic Kernel 4/3, Agno 4/3. That is the point. A conformant counterparty
+makes every mechanism look identical, so a measurement taken only against a well-behaved provider
+cannot tell a limit that holds from a limit that merely asks.
 
-The declared limit was 3 in both. The first row is the original 2026-08-23 condition: the mock
-parsed `model` and `stream` and nothing else, so it was a non-compliant provider, and that
-non-compliance is the **stressor** rather than a confound — a conformant provider hides the
-distinction entirely, which is the second row.
+This is R6 stated as a measurement. Agno's limit is **declared**: it sets `tool_choice="none"` at
+the limit and breaks the current batch (`agno/models/base.py:886` in `run_function_calls`, `:997`
+in `arun_function_calls`), and nothing in Agno compels the outcome. Semantic Kernel's is
+**enforced**: it stops advertising the capability and then declines the call regardless.
+openai-agents' is enforced without any signalling at all. The three are indistinguishable in a
+declaration and distinguishable in a ledger.
 
-A limit whose effect depends on the counterparty honouring a request is a **declared** limit
-rather than an enforced one, and that holds under both providers. The mechanism is the request
-itself: Agno asks, and nothing in Agno compels. An earlier revision of this file located the
-failure inside Agno's own control flow, which the two-provider measurement rules out. The
-procedure was pre-registered before execution in
+An earlier revision of this file located Agno's failure inside its own control flow, which the
+two-provider measurement rules out. The procedure was pre-registered before execution in
 `PREREGISTRATION-S2-tool-choice-2026-10-04.md`, and the amended record, including the withdrawn
 wording verbatim, is in `results/S2-executed.json` under
 `frameworks.agno.verification_tombstone`.
 
-This behaviour has **not** been reported to the Agno maintainers. No upstream issue exists, so the
-finding is unreviewed by anyone who maintains the library.
+Two limits on the above. The `enforced` boolean in `results/S2-executed.json` is the author's
+classification and not a reading — no code in `runners/` or `harness.py` produces it, and the same
+is true of `counter_at_budget_stop`, `unit_observed` and `mock_confirmed_calls`. And none of this
+has been reported to the Agno maintainers: no upstream issue exists, so the finding is unreviewed
+by anyone who maintains the library.
 
 ### S4: Parallel Tools (3 tools requested in one LLM response) — executed
 

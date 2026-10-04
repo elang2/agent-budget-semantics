@@ -1,7 +1,7 @@
 [
   {
-    "request_id": "mock-1791081395154-1",
-    "timestamp": 1791081395.1547751,
+    "request_id": "mock-1791083220111-1",
+    "timestamp": 1791083220.111031,
     "model": "mock-budget-llm",
     "prompt_tokens": 100,
     "completion_tokens": 25,
@@ -18,8 +18,8 @@
     "reasoning_tokens": 0
   },
   {
-    "request_id": "mock-1791081395158-2",
-    "timestamp": 1791081395.158327,
+    "request_id": "mock-1791083220115-2",
+    "timestamp": 1791083220.115063,
     "model": "mock-budget-llm",
     "prompt_tokens": 150,
     "completion_tokens": 25,
@@ -36,8 +36,8 @@
     "reasoning_tokens": 0
   },
   {
-    "request_id": "mock-1791081395160-3",
-    "timestamp": 1791081395.160528,
+    "request_id": "mock-1791083220117-3",
+    "timestamp": 1791083220.117635,
     "model": "mock-budget-llm",
     "prompt_tokens": 200,
     "completion_tokens": 25,
@@ -54,8 +54,8 @@
     "reasoning_tokens": 0
   },
   {
-    "request_id": "mock-1791081395162-4",
-    "timestamp": 1791081395.162661,
+    "request_id": "mock-1791083220120-4",
+    "timestamp": 1791083220.1201448,
     "model": "mock-budget-llm",
     "prompt_tokens": 250,
     "completion_tokens": 25,
