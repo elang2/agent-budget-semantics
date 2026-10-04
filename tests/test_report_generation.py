@@ -62,6 +62,18 @@ def regenerated(at_repo_root, tmp_path):
 
 
 @pytest.fixture(scope="module")
+def readme_text():
+    """README.md as text, so prose figures can be asserted against computed ones."""
+    return (REPO_ROOT / "README.md").read_text()
+
+
+@pytest.fixture(scope="module")
+def report_json():
+    """The committed reports/report.json, which is the source the README must track."""
+    return json.loads((REPORTS / "report.json").read_text())
+
+
+@pytest.fixture(scope="module")
 def s2():
     return json.loads((RESULTS / "S2-executed.json").read_text())
 
@@ -430,3 +442,65 @@ class TestMeasuredValuesAreImmutable:
         assert row["counter_at_budget_stop"] == counter
         assert row["unit_observed"] == unit
         assert row["enforced"] is enforced
+
+
+class TestReadmeFiguresTrackTheReport:
+    """The README's headline figures must come from the same source the matrix does.
+
+    These exist because README.md:257 carried "fires for 5/11 but not 6/11" for
+    weeks while the regenerated matrix said 6 fire, 4 do not, and 1 emits
+    nothing. A prose figure that restates a computed one drifts; the drift gate
+    catches reports/ against results/, and this catches README against reports/.
+
+    The expected values are DERIVED from reports/report.json on every run, never
+    written down here, so this test cannot itself become the stale figure.
+    """
+
+    THRESHOLD = 3
+
+    def _counts(self, report):
+        fw = report["frameworks"]
+        fire = [k for k, v in fw.items()
+                if v.get("consumed") is not None and v["consumed"] > self.THRESHOLD]
+        silent = [k for k, v in fw.items()
+                  if v.get("consumed") is not None and v["consumed"] <= self.THRESHOLD]
+        mute = [k for k, v in fw.items() if v.get("consumed") is None]
+        return fire, silent, mute
+
+    def test_alert_counts_in_readme_match_the_report(self, report_json, readme_text):
+        fire, silent, mute = self._counts(report_json)
+        total = len(report_json["frameworks"])
+        assert len(fire) + len(silent) + len(mute) == total
+        # The README must state each derived count, and must not state a count
+        # for a partition it does not have.
+        assert f"fires for {len(fire)} of the {total} rows" in readme_text, (
+            f"README alert sentence is stale: report.json gives {len(fire)} firing, "
+            f"{len(silent)} silent, {len(mute)} emitting nothing out of {total}"
+        )
+        assert f"not for {len(silent)}" in readme_text
+        assert f"{len(mute)} (Agno) emits no counter" in readme_text or \
+               f"{len(mute)} (Agno)" in readme_text
+
+    def test_executed_tier_is_not_an_agreement_claim(self, readme_text):
+        # "executed" is a tier. Asserting it means the observed value matched the
+        # model is the claim the validity contract exists to separate.
+        assert "observed values match model" not in readme_text
+        assert "whether the run happened" in readme_text
+
+    def test_matched_count_in_readme_matches_the_data(self, s2, readme_text):
+        fw = s2["frameworks"]
+        matched = [k for k, v in fw.items() if v.get("matched") is True]
+        informative = [k for k, v in fw.items() if v.get("status") == "informative"]
+        assert f"{len(matched)} of the {len(informative)} informative rows" in readme_text, (
+            f"README matched figure is stale: data gives {len(matched)}/{len(informative)}"
+        )
+
+    def test_five_value_set_is_not_called_identical_execution(self, readme_text):
+        # Swarm is archived and never ran, so the 10 is modelled. Two lines in
+        # README carried "5 ... values for identical execution"; neither may.
+        import re
+        for m in re.finditer(r"\[3, 4, 5, 8, 10\][^\n]*", readme_text):
+            line = m.group(0)
+            assert "identical execution" not in line or "not" in line.lower(), (
+                f"five-value set still claimed as identical execution: {line[:120]}"
+            )

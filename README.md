@@ -19,7 +19,7 @@ gen_ai.agent.iteration_budget.consumed = [3, 4, 5, 8]
 
 Same work. Same LLM calls. Same tokens consumed. Four different telemetry values across production frameworks. Setting `budget=3` means something fundamentally different depending on which framework is instrumented.
 
-Including archived/experimental frameworks (OpenAI Swarm), the spread widens to `[3, 4, 5, 8, 10]` with 5 unique values for identical execution.
+Adding the three rows that were not executed (Google ADK and Anthropic modelled, OpenAI Swarm archived) widens the spread to `[3, 4, 5, 8, 10]`. Those three values are model output, not observations, so the five-value set is not a set of answers to identical execution. The executed set is the four values above.
 
 ## The Evidence
 
@@ -41,7 +41,7 @@ Rows upgrade to "executed" as the differential harness validates each prediction
 | Agno | 1.2.5 | NOT ENFORCED | N/A | N/A | N/A | executed |
 
 Tier legend: **modeled** = counting logic derived from source code analysis at pinned version.
-**executed** = harness ran against mock LLM, observed values match model.
+**executed** = the harness ran this framework against the mock LLM. It is a statement about whether the run happened and carries no claim that the observed value matched the prediction; see `matched` for that, which held for 4 of the 7 informative rows. Agno ran and is `executed`, and emitted no counter, so it is `status: uninformative` and outside that denominator.
 **archived** = framework is experimental/not production (OpenAI Swarm).
 
 † The "`budget=3` means" column is validated by execution for rows marked `executed` (scenario S2). ‡ "Parallel 3 tools," "Error retry," and "Final answer" columns are derived from source-code analysis for all frameworks (scenarios S4/S5 not yet executed). These will upgrade to executed once the harness validates them.
@@ -200,7 +200,7 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 | LlamaIndex 0.14.24 | `max_iterations` | **4** | 133% | YES | LLM responses | executed |
 | Agno 1.2.5 | `tool_call_limit` | N/A | N/A | N/A | NOT ENFORCED | executed |
 
-**Unique `consumed` values: `[3, 4, 5, 8, 10]`** — 5 different answers for identical execution.
+**Unique `consumed` values: `[3, 4, 5, 8, 10]`** across all eleven rows, of which `[3, 4, 5, 8]` is the executed set. The 10 comes from OpenAI Swarm, which is archived and was never run, so it is a modelled value and the five-value set is not five answers to identical execution.
 Executed results in `results/S2-executed.json`.
 
 ### S4: Parallel Tools (3 tools requested in one LLM response) — executed
@@ -254,7 +254,7 @@ Same execution, different dashboard:
 | LangGraph | 8 | root → 4 llm → 3 tool | YES (consumed=8) |
 | Swarm | 8 | root → 4 llm → 3 tool | YES (consumed=10) |
 
-An alert threshold of `consumed > 3` fires for 5/11 frameworks but not 6/11. Same work. Same tokens. Your monitoring is framework-dependent.
+An alert threshold of `consumed > 3` fires for 6 of the 11 rows and not for 4, while 1 (Agno) emits no counter at all and so can neither fire nor stay silent. Same work, same tokens. Monitoring is framework-dependent, and a framework that reports nothing is invisible to the threshold rather than compliant with it. These counts are derived from `reports/report.json` and asserted by `tests/test_report_generation.py`.
 
 ## Use in CI
 

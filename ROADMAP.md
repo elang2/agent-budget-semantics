@@ -21,7 +21,7 @@ The README's headline table marks rows as `executed` based on S2, but carries co
 
 ### 0b. Pin matched-definition in schema
 
-The 50% prediction accuracy (4/8) holds under both `@ground_truth` and `@budget_stop` comparands, but the set of correct predictions differs. Pin `prediction_matched_at_ground_truth` as the canonical definition. Add a `matched_definition` key to the schema. Note in the artifact that the aggregate is definition-stable while the membership isn't.
+The prediction accuracy is reported against two denominators, 4/8 over all executed rows and 4/7 over the informative ones, since Agno emitted no counter for a prediction to match or miss. Both figures hold under both `@ground_truth` and `@budget_stop` comparands, but the set of correct predictions differs. Pin `prediction_matched_at_ground_truth` as the canonical definition. Add a `matched_definition` key to the schema. Note in the artifact that the aggregate is definition-stable while the membership isn't.
 
 ### 0c. Regenerate reports from S2-executed.json
 
