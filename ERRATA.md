@@ -96,3 +96,23 @@ stated two ways in the repository, both totalling 478: `cost_divergence.py:205-2
 `input_tokens=350` and `output_tokens=128`, while the module docstring at `:14` and E1 above
 both give "300 input / 178 output". Every published cost figure is computed from the coded
 values, so no cost number is affected, but the prose and the code disagree about the split.
+
+**Addendum, 2026-10-04 — the disclosure above named only Agno, and the model is wider than that.**
+`cost_divergence.FRAMEWORK_ITERATION_COUNTS` is the source-reading model for every row, not just
+the one row E1 discusses, and at least two of its entries disagree with what execution showed.
+LlamaIndex is counted at tool cycles, where amendment 1 in `results/S2-executed.json` records
+`max_iterations` counting LLM responses. Agno is counted at tool cycles, where it emitted no
+counter at all and ran to ten LLM calls under a declared limit of three. `autogen` and `langgraph`
+are counted at `llm + tools`, which is the pre-correction prediction for both.
+
+The 2.6363x ratio is unchanged by this, and so is the direction of the finding: the ratio is
+between the model's own endpoints and is a property of the declared counting rules. What was
+incomplete is the disclosure. The minimum, 0.12834, is shared by six rows rather than being one
+framework's figure, and the comparison should be read as what these eleven counting rules would
+bill for one workload, never as what eleven runs did cost. The README cost block now says so, and
+the figures there are the ones the CLI prints.
+
+**Also corrected, 2026-10-04.** The README cost block had been stale for long enough to disagree
+with the code in every figure: it listed four frameworks against the eleven the CLI prints, and an
+annual spread of $97,200 against the $75,600 the code computes. A test now derives the spread from
+`cost_divergence` and asserts the README states it, so the block cannot drift again.

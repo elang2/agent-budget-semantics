@@ -11,7 +11,7 @@ That illustrative pair is a 2.33x spread (7/3); it is a worked example, not a
 measurement.
 
 The measured figure, from calculate_cost_per_framework on the reference
-workload (4 LLM calls, 3 tool calls, 300 input / 178 output tokens, the
+workload (4 LLM calls, 3 tool calls, 350 input / 128 output tokens, the
 enterprise-chargeback pricing model), is a **2.64x** max/min spread across the
 11 frameworks: 0.33834 for swarm against 0.12834 for agno. The spread traces to
 iteration-count disagreement rather than to token pricing.

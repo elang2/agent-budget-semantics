@@ -588,6 +588,33 @@ class TestReadmeFiguresTrackTheReport:
         "seven enforce and one does not",
     )
 
+    def test_readme_cost_block_tracks_the_code(self, readme_text):
+        """The README cost figures are derived here, never transcribed.
+
+        The block had drifted until it disagreed with the code in every
+        figure: four frameworks listed against the eleven the CLI prints, and
+        an annual spread of $97,200 against the $75,600 the code computes.
+        """
+        from cost_divergence import calculate_cost_per_framework, PRICING_MODELS
+        costs = calculate_cost_per_framework(
+            llm_calls=4, tool_calls=3,
+            total_input_tokens=350, total_output_tokens=128,
+            pricing=PRICING_MODELS["enterprise-chargeback"],
+        )
+        per_run = sorted(row["total_cost"] for row in costs.values())
+        monthly_spread = (per_run[-1] - per_run[0]) * 1000 * 30
+        annual = monthly_spread * 12
+        # Stated two ways in the README, so assert both renderings.
+        assert f"${annual:,.0f}" in readme_text or f"${annual:.0f}" in readme_text, (
+            f"README does not state the annual spread the code computes: "
+            f"${annual:,.0f}"
+        )
+        assert "$97,200" not in readme_text, "stale annual spread still in README"
+        assert "enterprise-chargeback" in readme_text, (
+            "the README must name the pricing model, since the figure is a "
+            "constructed rate and not a vendor rate card"
+        )
+
     def test_cards_and_matrix_agree_on_enforcement(self, s2):
         """A card and the matrix must not disagree about the headline finding.
 

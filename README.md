@@ -80,7 +80,7 @@ one.
 # Show the iteration divergence matrix
 agent-budget-semantics compare
 
-# Show cost divergence ($97K/year spread at scale)
+# Show cost divergence ($75,600/year spread on a constructed rate at scale)
 agent-budget-semantics cost --daily-runs 1000
 
 # Show OTel telemetry divergence (what your dashboard would show)
@@ -116,15 +116,36 @@ swarm              10         333%          Messages added to history
 ### Cost divergence (makes it tangible)
 
 ```
-Monthly Cost Projection (1000 runs/day)
+Monthly Cost Projection (1000 runs/day × 30 days = 30000 runs)
+======================================================================
+Framework        Per-run $    Monthly $      vs cheapest
 ----------------------------------------------------------------------
-langchain        $5,850/mo     baseline
-openai_agents    $6,750/mo     +$900 (+15%)
-autogen          $10,350/mo    +$4,500 (+77%)
-swarm            $13,950/mo    +$8,100 (+138%)
+langchain        $0.1273      $3820.20       baseline
+crewai           $0.1273      $3820.20       baseline
+adk              $0.1273      $3820.20       baseline
+semantic_kernel  $0.1273      $3820.20       baseline
+llamaindex       $0.1273      $3820.20       baseline
+agno             $0.1273      $3820.20       baseline
+openai_agents    $0.1573      $4720.20       +$900.00 (+24%)
+anthropic        $0.1573      $4720.20       +$900.00 (+24%)
+autogen          $0.2473      $7420.20       +$3600.00 (+94%)
+langgraph        $0.2473      $7420.20       +$3600.00 (+94%)
+swarm            $0.3373      $10120.20      +$6300.00 (+165%)
 
-Annual spread: $97,200 — from iteration counting alone.
+Monthly spread: $6300.00
+Annual spread: $75600.00
 ```
+
+Two things this block is not. The rate is `enterprise-chargeback`, a
+constructed pricing model and not any vendor's rate card, so the spread is a
+property of the counting disagreement rather than a bill anyone received. And
+every row's iteration count is the **source-reading model**, not an executed
+reading, which matters in two places: LlamaIndex is counted at tool cycles
+where execution showed `max_iterations` counting LLM responses, and Agno is
+counted at 3 where it emitted no counter at all and ran to 10 LLM calls. The
+cost comparison is therefore a statement about what the declared counting
+rules would bill, which is the point, and not a measurement of what these
+eleven runs did cost.
 
 ### OTel span structure (what your dashboard shows)
 
