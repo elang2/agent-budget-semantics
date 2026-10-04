@@ -201,6 +201,34 @@
         "enforcement_effective": false,
         "observed_behavior": "model._function_call_stack grew to 9, tool_choice set to 'none' post-run. Enforcement fires but outer agent loop does not respect tool_choice change.",
         "alternative_hypothesis_ruled_out": "This is NOT a silently-ignored kwarg. The field exists, propagates, and the enforcement code runs. The bug is that the outer loop continues calling the LLM with tools regardless."
+      },
+      "verification_tombstone": {
+        "created_at": "2026-10-04",
+        "applies_to": "frameworks.agno.verification",
+        "status": "the sibling `verification` block is retained verbatim and is WRONG in three fields. It is not edited, because an appended correction is auditable and an in-place edit is not.",
+        "superseded_by": "results/S2-toolchoice-2026-10-04.json",
+        "wrong_fields": {
+          "enforcement_code_location": {
+            "recorded": "Model.arun_function_calls line 961: sets tool_choice='none' after limit",
+            "measured": "agno/models/base.py:886 in run_function_calls (def at :812) and agno/models/base.py:997 in arun_function_calls (def at :921). Two sites, not one. The field is declared at :63. Line 961 is AgentRunException handling and is unrelated.",
+            "how_measured": "grep tool_choice over the installed agno 1.2.5 models/base.py, then awk for the enclosing def of each hit"
+          },
+          "observed_behavior": {
+            "recorded": "Enforcement fires but outer agent loop does not respect tool_choice change.",
+            "measured": "The outer loop does respect it. The MOCK did not read tool_choice at all, so it kept returning tool calls and agno executed them. Under a mock that honours tool_choice, agno stops at 4 LLM / 3 tool calls. Measured in both modes; see the cells agno/ignore and agno/honour."
+          },
+          "alternative_hypothesis_ruled_out": {
+            "recorded": "The bug is that the outer loop continues calling the LLM with tools regardless.",
+            "measured": "That hypothesis was never tested. The one alternative the original run could not rule out is the one that turned out to hold: that the counterparty, not the framework, was the non-compliant party."
+          }
+        },
+        "corrected_finding": "agno 1.2.5 enforces its tool-call limit cooperatively. On reaching the limit it sets tool_choice='none' for subsequent requests and breaks out of the current batch. It has no client-side refusal, so against a provider that ignores tool_choice it continued to 10 LLM and 9 tool calls under a declared limit of 3. Against a provider that honours it, the limit held at 4/3.",
+        "retired_wording": [
+          "enforcement fires and the outer loop ignores the effect",
+          "enforcement fires but outer agent loop does not respect tool_choice change",
+          "seven enforce and one does not"
+        ],
+        "enforcement_effective_note": "the sibling field `enforcement_effective: false` is true only of the non-compliant-provider condition, which was the only condition run on 2026-08-23. It is unqualified in that block and should be read as provider-conditional."
       }
     }
   },
@@ -258,6 +286,20 @@
       "pattern": "Append-only amendment record, after the mutations.jsonl stream of arXiv:2605.12131 (Masters, Liu and Albrecht, 'Rollout Cards: A Reproducibility Standard for Agent Research') Appendix E.1, 'Portable archive layout', whose row schema is (sequence, mutation_type, target_type, target_id, actor, old_value, new_value, reason, created_at) and whose first portability invariant is that the stream is strictly append-only, with reversals appearing as new mutations and deletions as tombstones. Entries here are never edited or removed; a correction is a new entry with a higher sequence.",
       "note": "created_at is the date this amendment was recorded, not the date of the run it describes. An earlier revision backdated it to the 2026-08-23 execution date, which defeats the purpose of an append-only log.",
       "run_executed_at": "2026-08-23"
+    },
+    {
+      "sequence": 2,
+      "created_at": "2026-10-04",
+      "target": "frameworks.agno",
+      "field": "verification.observed_behavior / enforcement_code_location / alternative_hypothesis_ruled_out",
+      "old_value": "see frameworks.agno.verification, retained verbatim and unedited",
+      "new_value": "see frameworks.agno.verification_tombstone",
+      "reason": "A pre-registered re-run under two mock policies (PREREGISTRATION-S2-tool-choice-2026-10-04.md, committed before execution) established that the mock never read tool_choice and was therefore a non-compliant provider. agno's enforcement does take effect when the counterparty honours it. The original verification block attributed the failure to agno's outer loop, which the data does not support.",
+      "revised_after_execution": true,
+      "affects_prediction_model_score": false,
+      "effect": "No measured field in this file changes. agno's status stays `uninformative` for the reason already recorded (no counter was emitted), and both denominators are unaffected. What changes is the mechanism attributed to the observation, and therefore what may be claimed publicly.",
+      "run_executed_at": "see results/S2-toolchoice-2026-10-04.json executed_at",
+      "note": "Two further divergences surfaced in the same re-run and are recorded in the new file rather than here, because they concern rows this amendment does not target: semantic_kernel's framework-reported tool count is 3 against an observed 4 under the non-compliant provider and agrees at 3/3 under the conformant one; and crewai 1.15.16 raises a pydantic TaskOutput validation error on this scenario at the pinned version, where this file records stopped_by `budget_then_finalize`."
     }
   ]
 }

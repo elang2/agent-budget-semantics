@@ -12,7 +12,14 @@ env/
 .pytest_cache/
 .mypy_cache/
 results/*.json
+# `results/*.json` ignores scratch harness output. Every file that is evidence
+# is un-ignored by name below, so a tracked result is a declared one rather
+# than a historical `git add -f` nobody can see. S4/S5 predate this comment and
+# are tracked already; they are listed so the set is readable in one place.
 !results/S2-executed.json
+!results/S4-executed.json
+!results/S5-executed.json
+!results/S2-toolchoice-2026-10-04.json
 .DS_Store
 .env
 

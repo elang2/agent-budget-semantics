@@ -19,6 +19,9 @@ LEDGER: list[dict] = []
 LEDGER_LOCK = threading.Lock()
 SCRIPT: list[dict] = []
 SCRIPT_INDEX = 0
+# "ignore" reproduces the 2026-08-23 provider behaviour exactly. "honour" makes
+# the mock a conformant provider. Default is ignore so no recorded result moves.
+TOOL_CHOICE_POLICY = "ignore"
 
 
 # The token-details block the server emits on every response. These are
@@ -68,6 +71,11 @@ class LedgerEntry:
     # claim the ground truth had no basis on which to check it. These fields
     # carry the emitted values through so that check becomes possible; they do
     # not model a cache, and they are zero because zero is what is emitted.
+    # What the caller asked about tools, and what the mock did with it.
+    tool_choice_received: object = None
+    tools_present: bool = False
+    tool_choice_policy: str = "ignore"
+    tool_choice_honoured: bool = False
     cached_tokens: int = EMITTED_CACHED_TOKENS
     cache_write_tokens: int = EMITTED_CACHE_WRITE_TOKENS
     reasoning_tokens: int = EMITTED_REASONING_TOKENS
@@ -134,6 +142,14 @@ class Handler(BaseHTTPRequestHandler):
 
         model = body.get("model", "mock-budget-llm")
         stream = bool(body.get("stream", False))
+
+        # What the caller asked for about tools. Recorded on every ledger entry
+        # regardless of policy, because until 2026-10-04 the ledger could not
+        # show whether a framework had ever sent `tool_choice: none` — which is
+        # exactly the question the Agno finding turns on.
+        tool_choice_recv = body.get("tool_choice", None)
+        tools_present = bool(body.get("tools"))
+
         scripted = get_next_response()
 
         prompt_tokens = scripted.get("prompt_tokens", 100)
@@ -141,6 +157,22 @@ class Handler(BaseHTTPRequestHandler):
         total_tokens = prompt_tokens + completion_tokens
         finish_reason = scripted.get("finish_reason", "stop")
         tool_calls = scripted.get("tool_calls", None)
+
+        # TOOL_CHOICE_POLICY is `ignore` by default, which is the 2026-08-23
+        # behaviour byte-for-byte: the mock parsed `model` and `stream` and
+        # nothing else, so a framework that asked it to stop calling tools was
+        # ignored and kept being handed tool calls. That is a non-compliant
+        # provider, and it is the stressor that distinguishes a framework which
+        # refuses client-side from one which only asks the counterparty to stop.
+        # Keep both modes: a conformant provider hides the difference.
+        honoured_tool_choice = False
+        if TOOL_CHOICE_POLICY == "honour" and tool_calls is not None:
+            if tool_choice_recv == "none" or not tools_present:
+                tool_calls = None
+                finish_reason = "stop"
+                honoured_tool_choice = True
+                if not scripted.get("content"):
+                    completion_tokens = scripted.get("completion_tokens", 50)
 
         request_id = f"mock-{int(time.time()*1000)}-{SCRIPT_INDEX}"
 
@@ -155,6 +187,10 @@ class Handler(BaseHTTPRequestHandler):
         # ledger records what the script asked for; the response records what
         # the client was told. Preserved as-is.
         entry = asdict(LedgerEntry(
+            tool_choice_received=tool_choice_recv,
+            tools_present=tools_present,
+            tool_choice_policy=TOOL_CHOICE_POLICY,
+            tool_choice_honoured=honoured_tool_choice,
             request_id=request_id,
             timestamp=time.time(),
             model=model,
@@ -295,7 +331,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 
-def run(port: int = 9111, script: Optional[list[dict]] = None):
+def run(port: int = 9111, script: Optional[list[dict]] = None,
+        tool_choice_policy: str = "ignore"):
+    global TOOL_CHOICE_POLICY
+    if tool_choice_policy not in ("ignore", "honour"):
+        raise SystemExit(f"tool_choice_policy must be ignore|honour, got {tool_choice_policy!r}")
+    TOOL_CHOICE_POLICY = tool_choice_policy
     if script:
         load_script(script)
     server = HTTPServer(("127.0.0.1", port), Handler)
@@ -310,6 +351,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Mock LLM for budget differential testing")
     parser.add_argument("--port", type=int, default=9111)
     parser.add_argument("--script", help="Path to scenario YAML file")
+    parser.add_argument(
+        "--tool-choice-policy", choices=["ignore", "honour"], default="ignore",
+        help=(
+            "ignore (default) reproduces the 2026-08-23 provider: tool_choice is "
+            "never read, so a framework asking the provider to stop calling tools "
+            "keeps being handed them. honour makes the mock conformant: on "
+            "tool_choice=none, or absent/empty tools, it returns the scripted text "
+            "turn with finish_reason=stop. Both modes are kept because a conformant "
+            "provider hides the difference between a framework that refuses "
+            "client-side and one that only asks the counterparty to stop."
+        ),
+    )
     args = parser.parse_args()
 
     if args.script:
@@ -319,4 +372,4 @@ if __name__ == "__main__":
         print(f"Loaded scenario: {scenario.get('name', args.script)}")
         print(f"  Turns: {len(scenario.get('script', []))}")
 
-    run(port=args.port)
+    run(port=args.port, tool_choice_policy=args.tool_choice_policy)
