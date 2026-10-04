@@ -146,6 +146,35 @@ jobs:
           python cli.py spans
           python cli.py dimensions
 
+      - name: Installed wheel reports the reading, not the model
+        # Same defect as the container, same silence. A clean `pip install`
+        # into a fresh venv, run from a directory with no results/, used to
+        # print Agno at consumed=3 labelled "modeled" where the reading is
+        # "n/a NOT ENFORCED". Two things had to be true to fix it: results/
+        # ships in the wheel, and the lookup considers the directory beside
+        # the module rather than only the CWD. This asserts both, by running
+        # from a scratch directory.
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet build
+          python -m build --wheel --outdir /tmp/whl >/dev/null
+          python -m venv /tmp/cleanenv
+          /tmp/cleanenv/bin/pip install --quiet /tmp/whl/*.whl
+          mkdir -p /tmp/scratch
+          cd /tmp/scratch
+          test ! -d results || { echo "scratch dir unexpectedly has results/"; exit 1; }
+          /tmp/cleanenv/bin/agent-budget-semantics report --output /tmp/scratch/out
+          row=$(grep -i '^| agno' /tmp/scratch/out/divergence-matrix.md)
+          echo "agno row: $row"
+          case "$row" in
+            *"NOT ENFORCED"*) ;;
+            *) echo "FAIL: agno row is not the executed reading"; exit 1 ;;
+          esac
+          case "$row" in
+            *modeled*) echo "FAIL: agno row fell back to the prediction model"; exit 1 ;;
+          esac
+          echo "PASS: wheel reports the executed reading from a scratch directory"
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -168,6 +197,33 @@ jobs:
             docker run --rm agent-budget-semantics "$cmd" > /dev/null
           done
           echo "PASS: 5 advertised container commands ran"
+
+      - name: The image reports the reading, not the model, from any directory
+        # `compare` and `cost` were the only commands run here and neither
+        # reads results/, so the image shipped without the executed readings
+        # and nothing noticed. The consequence was specific and silent: every
+        # row fell back to the prediction model and Agno printed consumed=3
+        # labelled "modeled" where the reading is "n/a NOT ENFORCED". That is
+        # the substitution the validity contract exists to refuse.
+        #
+        # Run from /tmp, not /app, because the lookup used to be CWD-relative:
+        # shipping results/ in the image did not help until the lookup also
+        # considered the directory beside the module. Running from the app dir
+        # would pass either way and prove nothing.
+        run: |
+          set -euo pipefail
+          row=$(docker run --rm --entrypoint sh agent-budget-semantics -c \
+            "cd /tmp && python /app/cli.py report --output /tmp/r >/dev/null && \
+             grep -i '^| agno' /tmp/r/divergence-matrix.md")
+          echo "agno row: $row"
+          case "$row" in
+            *"NOT ENFORCED"*) ;;
+            *) echo "FAIL: agno row is not the executed reading"; exit 1 ;;
+          esac
+          case "$row" in
+            *modeled*) echo "FAIL: agno row fell back to the prediction model"; exit 1 ;;
+          esac
+          echo "PASS: image reports the executed reading from a non-app directory"
 
       - name: Modules the image must carry are importable
         # The COPY list is the only thing standing between the image and a

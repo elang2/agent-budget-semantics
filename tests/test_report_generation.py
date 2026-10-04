@@ -573,6 +573,56 @@ class TestReadmeFiguresTrackTheReport:
                 f"the eleven rows were never run: {bad[:3]}"
             )
 
+    # Retired on 2026-10-04 by the pre-registered tool_choice re-run. Agno's
+    # enforcement IS respected by its own outer loop; the mock never read
+    # tool_choice, so the non-compliant party was the provider. Under a
+    # conformant provider the limit holds at 4/3. The retired phrasings are
+    # kept verbatim in results/S2-executed.json's verification block and in
+    # its tombstone's `retired_wording` list, deliberately, so this check is
+    # scoped to the README and the generated reports rather than the tree.
+    RETIRED_AGNO_PHRASES = (
+        "outer loop ignores",
+        "outer agent loop ignores",
+        "outer agent loop does not respect",
+        "runs unbounded",
+        "seven enforce and one does not",
+    )
+
+    @staticmethod
+    def _retired_agno_violations(text):
+        low = text.lower()
+        return [p for p in TestReadmeFiguresTrackTheReport.RETIRED_AGNO_PHRASES
+                if p in low]
+
+    def test_retired_agno_framing_is_not_in_readme_or_reports(self, readme_text):
+        import pathlib
+        targets = {"README.md": readme_text}
+        for p in sorted(pathlib.Path("reports").glob("*.md")):
+            targets[str(p)] = p.read_text()
+        for name, text in targets.items():
+            bad = self._retired_agno_violations(text)
+            assert not bad, (
+                f"{name} carries retired Agno framing {bad}. Enforcement is "
+                "cooperative: the framework asks the provider to stop and has no "
+                "client-side refusal. The provider was the non-compliant party. "
+                "See results/S2-toolchoice-2026-10-04.json."
+            )
+
+    def test_the_retired_framing_check_can_be_loud(self):
+        # Exercise the real helper on the actual sentence the generator used to
+        # emit, and on the live corrected sentence, so the control distinguishes
+        # a right answer from a wrong one rather than merely firing.
+        was_emitted = ("The budget parameter exists, propagates, and its enforcement "
+                       "code runs, but the outer agent loop ignores it, so no counter "
+                       "is emitted and the agent runs unbounded.")
+        found = self._retired_agno_violations(was_emitted)
+        assert "outer agent loop ignores" in found and "runs unbounded" in found, found
+        now_emitted = ("enforcement is cooperative: on reaching the limit the framework "
+                       "asks the provider to stop calling tools and has no client-side "
+                       "refusal if the provider calls one anyway.")
+        assert not self._retired_agno_violations(now_emitted), (
+            "the corrected sentence must not trip the check")
+
     def test_the_execution_claim_check_can_be_loud(self):
         # A check that is never shown to fire is indistinguishable from a check
         # that cannot fire. Both banned phrasings must be caught, the adjacent

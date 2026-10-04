@@ -3,5 +3,17 @@ __pycache__/
 *.pyc
 .git/
 reports/
+# results/ is excluded because it also collects scratch harness output, then
+# the files that are evidence are re-included by name. Excluding the whole
+# directory was the real reason the image lacked the executed readings -- the
+# Dockerfile's missing COPY was downstream of this, and adding the COPY alone
+# made the build fail outright rather than fixing anything. The allowlist
+# mirrors the one in .gitignore so the two cannot disagree about what counts
+# as evidence.
 results/
+!results/S2-executed.json
+!results/S4-executed.json
+!results/S5-executed.json
+!results/S2-toolchoice-2026-10-04.json
+!results/ledgers/
 .pytest_cache/

@@ -18,6 +18,12 @@ COPY runners/ ./runners/
 COPY mock-llm/ ./mock-llm/
 COPY scenarios/ ./scenarios/
 COPY expectations/ ./expectations/
+# results/ holds the executed readings. Without it the report falls back to the
+# prediction model for every row and shows Agno at the modelled 3 rather than
+# the observed 10, which is exactly the substitution the validity contract
+# refuses. The image ran `compare` and `cost` in CI, neither of which reads it,
+# so the omission stayed invisible.
+COPY results/ ./results/
 COPY tests/ ./tests/
 
 # [dev] only, by decision rather than by omission. The container exists for the

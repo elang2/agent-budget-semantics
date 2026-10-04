@@ -11,6 +11,7 @@ Outputs:
 """
 
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -112,8 +113,13 @@ def generate_divergence_matrix(llm_calls: int, tool_calls: int,
             "- **" + ", ".join(uninformative) + "** "
             + ("reports" if len(uninformative) == 1 else "report")
             + " no consumed value at all. The budget parameter exists, propagates, and "
-              "its enforcement code runs, but the outer agent loop ignores it, so no "
-              "counter is emitted and the agent runs unbounded. This is a measurement, "
+              "its enforcement code runs, but enforcement is cooperative: on reaching "
+              "the limit the framework asks the provider to stop calling tools and has "
+              "no client-side refusal if the provider calls one anyway. Against a "
+              "provider that ignored the request it continued past the declared limit "
+              "and emitted no counter. Against one that honoured it the limit held. "
+              "Both conditions are recorded in results/S2-toolchoice-2026-10-04.json. "
+              "This is a measurement, "
               "not a gap: scored as `n/a`, excluded from the disagreement count, and "
               "never replaced by the prediction model's number. The Counting Method "
               "shown for such a row is the unvalidated source-code model, since no "
@@ -279,10 +285,12 @@ def generate_otel_recommendations(disagreement_factor: Optional[int] = None,
     lines.append("LlamaIndex sits under `llm_calls`, not `tool_cycles`: execution showed")
     lines.append("`max_iterations` counting LLM responses. Agno gets no counting method")
     lines.append("because it emitted no counter -- its budget parameter exists and")
-    lines.append("propagates, but the agent runs unbounded, so there is no unit to")
-    lines.append("classify. A spec enum needs a value for that case, or every")
+    lines.append("propagates, but enforcement is cooperative, so against a provider that")
+    lines.append("ignored the request it ran past the limit with no unit to classify.")
+    lines.append("A spec enum needs a value for that case, or every")
     lines.append("non-enforcing implementation will be recorded under a method it does")
-    lines.append("not implement. See results/S2-executed.json.")
+    lines.append("not implement. See results/S2-executed.json and")
+    lines.append("results/S2-toolchoice-2026-10-04.json for both provider conditions.")
     lines.append("")
 
     lines.append("## Recommendation 2: Parallel tool batch semantics")
@@ -347,8 +355,46 @@ FRAMEWORK_VERSIONS = {
 
 
 def _load_harness_results(scenario: str) -> dict:
-    """Load executed harness results if they exist. Returns {framework: result_dict}."""
-    results_dir = Path("results")
+    """Load executed harness results. Returns {framework: result_dict}.
+
+    Refuses to return silently empty. `Path("results").glob("*.json")` on an
+    absent directory yields nothing and raises nothing, so a run from a clean
+    install or from the wrong working directory produced zero executed rows,
+    every row fell back to the prediction model, and the report showed Agno at
+    the modelled 3 labelled "modeled" where the reading is 10. A report that
+    substitutes the model for the measurement and says nothing is the one
+    output this project must not produce, so the absence is now an error with
+    the remedy in it rather than a quiet downgrade.
+
+    Set ABS_ALLOW_MODELLED_ONLY=1 to override, which is for generating a
+    report deliberately without readings and is not a supported citation path.
+    """
+    # Two candidates, in this order. The working directory comes first so a
+    # developer's freshly-run results override the shipped ones; the directory
+    # beside this module comes second so an installed copy works at all.
+    # Shipping results/ in the wheel was necessary but not sufficient -- the
+    # lookup was CWD-only, so the packaged data sat unread in site-packages
+    # while the report fell back to the model.
+    candidates = [Path("results"), Path(__file__).resolve().parent / "results"]
+    results_dir = next(
+        (c for c in candidates if c.is_dir() and any(c.glob("*.json"))),
+        None,
+    )
+    if results_dir is None:
+        if os.environ.get("ABS_ALLOW_MODELLED_ONLY"):
+            return {}
+        looked = "\n".join(f"  {c.resolve()}" for c in candidates)
+        raise SystemExit(
+            "no executed results found. Looked in:\n" + looked + "\n\n"
+            "Every row would fall back to the prediction model and be labelled\n"
+            "'modeled', which silently replaces the executed readings -- Agno would\n"
+            "read 3 instead of the observed 10. That substitution is the one thing\n"
+            "the validity contract exists to refuse, so this is an error rather than\n"
+            "a quiet downgrade.\n\n"
+            "Run from the project root, or reinstall: results/ ships in the wheel and\n"
+            "the container as of 0.5.1.\n"
+            "To generate a model-only report anyway, set ABS_ALLOW_MODELLED_ONLY=1."
+        )
     executed = {}
     for path in results_dir.glob("*.json"):
         try:

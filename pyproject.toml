@@ -96,6 +96,14 @@ only-include = [
     "mock-llm",
     "scenarios",
     "expectations",
+    # results/ holds the executed readings. Without it, _load_harness_results
+    # globs an absent directory, finds nothing, and every row falls back to the
+    # prediction model -- so `agent-budget-semantics report` from a clean
+    # install reported Agno at the modelled 3 instead of the observed 10,
+    # labelled "modeled", which is the substitution the validity contract
+    # exists to refuse. The generator now also refuses to fall back silently,
+    # because shipping the data does not help a user who runs from elsewhere.
+    "results",
     "budget_accumulator.py",
     "synthesis_detector.py",
     "cost_divergence.py",
@@ -115,6 +123,8 @@ include = [
     "scenarios/",
     "tests/",
     "expectations/",
+    "results/",
+    "experiments/",
     "cli.py",
     "harness.py",
     "otel_comparison.py",
@@ -125,6 +135,8 @@ include = [
     "budget_accumulator.py",
     "synthesis_detector.py",
     "DIMENSIONS.md",
+    "ERRATA.md",
+    "PINS.md",
     "README.md",
     "LICENSE",
     "pyproject.toml",

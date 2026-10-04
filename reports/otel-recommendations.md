@@ -37,10 +37,12 @@ enum, since the measurement is the contribution:
 LlamaIndex sits under `llm_calls`, not `tool_cycles`: execution showed
 `max_iterations` counting LLM responses. Agno gets no counting method
 because it emitted no counter -- its budget parameter exists and
-propagates, but the agent runs unbounded, so there is no unit to
-classify. A spec enum needs a value for that case, or every
+propagates, but enforcement is cooperative, so against a provider that
+ignored the request it ran past the limit with no unit to classify.
+A spec enum needs a value for that case, or every
 non-enforcing implementation will be recorded under a method it does
-not implement. See results/S2-executed.json.
+not implement. See results/S2-executed.json and
+results/S2-toolchoice-2026-10-04.json for both provider conditions.
 
 ## Recommendation 2: Parallel tool batch semantics
 
