@@ -67,7 +67,7 @@ def generate_divergence_matrix(llm_calls: int, tool_calls: int,
             # No counter was emitted. Printing the model's number here is exactly
             # the substitution this report used to make, and it erased the finding.
             uninformative.append(fw)
-            consumed_cell = "n/a **NOT ENFORCED**"
+            consumed_cell = "n/a **NOT ENFORCED\\***"
             util_cell = "n/a"
             method = f"{method} (unvalidated: no unit observed)"
         else:

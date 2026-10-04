@@ -15,7 +15,7 @@
 | anthropic | `NONE (client-side only)` | 3 | 4 **EXCEEDED** | 133% | modeled | Client-defined (no server concept) |
 | swarm | `max_turns` | 3 | 10 **EXCEEDED** | 333% | modeled | Messages added to history since start |
 | llamaindex | `agent.run(max_iterations=N)` | 3 | 4 **EXCEEDED** | 133% | executed | Each LLM response (parse_agent_output calls) |
-| agno | `Agent(tool_call_limit=N)` | 3 | n/a **NOT ENFORCED** | n/a | executed | Each tool-use cycle (unvalidated: no unit observed) |
+| agno | `Agent(tool_call_limit=N)` | 3 | n/a **NOT ENFORCED\*** | n/a | executed | Each tool-use cycle (unvalidated: no unit observed) |
 
 **Unique consumed values:** `[3, 4, 5, 8, 10]`
 **Spread across all 11 rows:** `[3, 4, 5, 8, 10]` — 5 distinct values, mixing rows that were run with rows predicted from source.

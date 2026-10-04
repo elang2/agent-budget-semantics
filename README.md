@@ -38,11 +38,13 @@ Rows upgrade to "executed" as the differential harness validates each prediction
 | Anthropic | 0.39.0 | Client-defined | Client decides | Client decides | Client decides | modeled |
 | Swarm | 0.1.0 | Messages in history | 2N budget units | Counts | Counts | archived |
 | LlamaIndex | 0.14.24 | 3 LLM responses | 1 budget unit | Counts | Counts | executed |
-| Agno | 1.2.5 | NOT ENFORCED | N/A | N/A | N/A | executed |
+| Agno | 1.2.5 | NOT ENFORCED\* | N/A | N/A | N/A | executed |
 
 Tier legend: **modeled** = counting logic derived from source code analysis at pinned version.
 **executed** = the harness ran this framework against the mock LLM. It is a statement about whether the run happened and carries no claim that the observed value matched the prediction; see `matched` for that, which held for 4 of the 7 informative rows. Agno ran and is `executed`, and emitted no counter, so it is `status: uninformative` and outside that denominator.
 **archived** = framework is experimental/not production (OpenAI Swarm).
+
+\* `NOT ENFORCED` describes the **recorded run**, which used a mock that ignores `tool_choice` and an absent `tools` array. Agno's limit is cooperative: against a conformant provider it holds at 4 model calls and 3 tool calls. The marker means the limit depends on the counterparty, not that it never holds. The three measured mechanisms and both provider conditions are in "Enforcement is not a boolean" below.
 
 † The "`budget=3` means" column is validated by execution for rows marked `executed` (scenario S2). ‡ "Parallel 3 tools," "Error retry," and "Final answer" columns are derived from source-code analysis for all frameworks. S4 (parallel tools) and S5 (error retry) have since been executed for four frameworks each -- langchain, langgraph, semantic_kernel and autogen -- in `results/S4-executed.json` and `results/S5-executed.json`. Those two files sit OUTSIDE the per-cell validity contract: no row in either carries a `unit_observed` or a counter, so no row can adjudicate a prediction, and their `provenance: executed` says only that the run happened. The columns here are therefore still the source reading for every framework, and the remaining seven have not been run on S4 or S5 at all.
 
@@ -219,7 +221,7 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 | Anthropic 0.39.0 | *(client-side)* | **4** | 133% | YES | client-defined | modeled |
 | Swarm 0.1.0 | `max_turns` | **10** | 333% | YES | all messages in history | archived |
 | LlamaIndex 0.14.24 | `max_iterations` | **4** | 133% | YES | LLM responses | executed |
-| Agno 1.2.5 | `tool_call_limit` | N/A | N/A | N/A | NOT ENFORCED | executed |
+| Agno 1.2.5 | `tool_call_limit` | N/A | N/A | N/A | NOT ENFORCED\* | executed |
 
 **Unique `consumed` values: `[3, 4, 5, 8, 10]`** across all eleven rows, of which `[3, 4, 5, 8]` is the executed set. The 10 comes from OpenAI Swarm, which is archived and was never run, so it is a modelled value and the five-value set is not five answers to identical execution.
 Executed results in `results/S2-executed.json`.

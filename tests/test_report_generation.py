@@ -684,19 +684,52 @@ class TestReadmeFiguresTrackTheReport:
         return [p for p in TestReadmeFiguresTrackTheReport.RETIRED_AGNO_PHRASES
                 if p in low]
 
-    def test_retired_agno_framing_is_not_in_readme_or_reports(self, readme_text):
-        import pathlib
-        targets = {"README.md": readme_text}
-        for p in sorted(pathlib.Path("reports").glob("*.md")):
-            targets[str(p)] = p.read_text()
-        for name, text in targets.items():
+    # The two files that hold the retired phrasings on purpose. S2-executed.json
+    # keeps the original `verification` block verbatim plus the tombstone's
+    # `retired_wording` list, which is the record of the error; this file holds
+    # the phrase list itself. Everything else in the tracked tree must be clean.
+    RETIRED_FRAMING_ALLOWLIST = {
+        "results/S2-executed.json",
+        "tests/test_report_generation.py",
+    }
+
+    def test_retired_agno_framing_is_nowhere_in_the_tracked_tree(self):
+        """Scope is every tracked file, not just README and reports/.
+
+        Scoped to README.md and reports/*.md, this gate passed while
+        .zenodo.json still described Agno as accepting "a tool_call_limit that
+        its outer loop does not respect" -- in the description that would have
+        been minted with the next deposit, where it is uncorrectable.
+        """
+        import pathlib, subprocess
+        tracked = subprocess.run(
+            ["git", "ls-files"], capture_output=True, text=True, check=True
+        ).stdout.split()
+        offenders, scanned = {}, 0
+        for rel in tracked:
+            if rel in self.RETIRED_FRAMING_ALLOWLIST:
+                continue
+            p = pathlib.Path(rel)
+            if not p.is_file():
+                continue
+            try:
+                text = p.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            scanned += 1
             bad = self._retired_agno_violations(text)
-            assert not bad, (
-                f"{name} carries retired Agno framing {bad}. Enforcement is "
-                "cooperative: the framework asks the provider to stop and has no "
-                "client-side refusal. The provider was the non-compliant party. "
-                "See results/S2-toolchoice-2026-10-04.json."
-            )
+            if bad:
+                offenders[rel] = bad
+        assert not offenders, (
+            f"retired Agno framing in {len(offenders)} of {scanned} tracked files: "
+            f"{offenders}. Enforcement is cooperative -- the framework asks the "
+            "provider to stop and has no client-side refusal, and the provider was "
+            "the non-compliant party. See results/S2-toolchoice-2026-10-04.json."
+        )
+        assert scanned > 20, (
+            f"only {scanned} files scanned; the walker is not reaching the tree, so "
+            "a clean result here would mean nothing"
+        )
 
     def test_the_retired_framing_check_can_be_loud(self):
         # Exercise the real helper on the actual sentence the generator used to

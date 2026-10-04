@@ -18,8 +18,18 @@ that pins the replacement, and where the uncorrectable copy still sits.
 | Superseded figure | `2.3x` max/min chargeback divergence |
 | Correct figure | **`2.6363x`** (0.33834 for swarm against 0.12834 for agno) |
 | Pinned by | `tests/test_cost_divergence.py::TestCalculateCostPerFramework::test_chargeback_divergence_paper_workload` |
-| Uncorrectable copy | the v0.5.0 Zenodo deposit description, DOI [10.5281/zenodo.22119569](https://doi.org/10.5281/zenodo.22119569) |
+| Uncorrectable copy | the v0.5.0 **software** deposit description, DOI [10.5281/zenodo.22605741](https://doi.org/10.5281/zenodo.22605741) — **corrected 2026-10-04**, see the note below |
 | Corrected in repo | `cost_divergence.py` module docstring; `.zenodo.json` description, which applies to the next version only |
+
+**Correction, 2026-10-04 — this entry named the wrong record.** The DOI given above was
+`10.5281/zenodo.22119569`, which is the **preprint** ("Budget Enforcement Semantics Diverge Across
+AI Agent Frameworks: An Empirical Study", resource type Preprint). Fetched from the Zenodo API: its
+description contains neither `2.3x` nor `2.6363`, so it was never the uncorrectable copy. The
+record that does carry `2.3x` is `10.5281/zenodo.22605741`, the v0.5.0 **software** deposit
+(`agent-budget-semantics`, resource type Software, version v0.5.0). An errata entry that points at
+the wrong artefact sends a reader to check a claim against a record that does not contain it, which
+is worse than the original error because it looks like diligence. Both records were fetched and
+their descriptions searched before this correction was written.
 
 **Computation basis, disclosed rather than buried.** The 2.6363x figure is computed over the
 modelled iteration-count vector in `cost_divergence.py`, in which the non-enforcing framework is

@@ -20,7 +20,9 @@ Last validated: 2026-08-23
 | Anthropic | anthropic | 0.39.0 | Client-side loop (no framework budget) |
 | Swarm | openai-swarm | 0.1.0 | `client.run(max_turns=N)` |
 | LlamaIndex | llama-index-core | 0.14.24 | `agent.run(max_iterations=N)` on FunctionAgent |
-| Agno | agno | 1.2.5 | `Agent(tool_call_limit=N)` — NOT ENFORCED |
+| Agno | agno | 1.2.5 | `Agent(tool_call_limit=N)` — NOT ENFORCED\* (cooperative; holds against a conformant provider — see README) |
+
+\* Measured against a provider that ignores `tool_choice`. Agno's limit is a request, not a refusal; against a conformant provider it holds.
 
 ## How to reproduce at pinned versions
 

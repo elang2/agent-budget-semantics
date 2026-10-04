@@ -16,7 +16,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not natively enforced (callback-based) |
 | Provenance | executed |
 | Budget Param As Run | `MaxMessageTermination(max_messages=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## openai_agents
 
@@ -30,7 +30,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not enforced |
 | Provenance | executed |
 | Budget Param As Run | `Runner.run(max_turns=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## langchain
 
@@ -44,7 +44,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not natively enforced (per-call max_tokens only) |
 | Provenance | executed |
 | Budget Param As Run | `AgentExecutor(max_iterations=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## langgraph
 
@@ -58,7 +58,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not enforced |
 | Provenance | executed |
 | Budget Param As Run | `config={"recursion_limit": N}` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## crewai
 
@@ -72,7 +72,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not enforced (max_rpm is rate limit, not budget) |
 | Provenance | executed |
 | Budget Param As Run | `Agent(max_iter=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## adk
 
@@ -98,7 +98,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | max_tokens per call only (not cumulative) |
 | Provenance | executed |
 | Budget Param As Run | `FunctionChoiceBehavior.Auto(maximum_auto_invoke_attempts=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## anthropic
 
@@ -136,7 +136,7 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Not enforced natively |
 | Provenance | executed |
 | Budget Param As Run | `agent.run(max_iterations=N)` |
-| Enforcement observed | enforced |
+| Enforcement (author classification) | limit held in the recorded run |
 
 ## agno
 
@@ -150,4 +150,4 @@ where the two disagree about a parameter name, the run governs.
 | Token Budget | Cumulative output token budget (unique feature) |
 | Provenance | executed |
 | Budget Param As Run | `Agent(tool_call_limit=N)` |
-| Enforcement observed | **NOT ENFORCED** — see results/S2-toolchoice-2026-10-04.json for both provider conditions |
+| Enforcement (author classification) | limit did not hold in the recorded run — mechanism measured in results/S2-toolchoice-2026-10-04.json |
