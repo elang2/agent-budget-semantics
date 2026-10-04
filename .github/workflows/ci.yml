@@ -229,8 +229,28 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install base + framework
-        run: pip install -e ".[${{ matrix.extra }}]"
+      - name: Install base + framework, pinned to PINS.md
+        # The extras in pyproject.toml are floors (`>=`), while PINS.md holds the
+        # exact versions every recorded result depends on. Installing the extra
+        # alone resolves to whatever is current, so with continue-on-error now
+        # removed, upstream churn in ten frameworks would red every PR without any
+        # framework having changed behaviour. Install the extra to pull the
+        # dependency tree, then pin the framework itself over it.
+        run: |
+          set -euo pipefail
+          pip install -e ".[${{ matrix.extra }}]"
+          python - <<'PIN'
+          import pathlib, re, subprocess, sys
+          runner = "${{ matrix.runner }}"
+          pins = re.findall(
+              r"pip install\s+([A-Za-z0-9._\[\]-]+==[0-9][^\s`]*)",
+              pathlib.Path("PINS.md").read_text(),
+          )
+          if not pins:
+              sys.exit("PINS.md yielded no pins; refusing to run unpinned")
+          print(f"pinning {len(pins)} packages from PINS.md for runner {runner}")
+          subprocess.run(["pip", "install", "--no-deps", *pins], check=True)
+          PIN
 
       - name: Run S2 scenario
         # `continue-on-error: true` was removed. It made every row green

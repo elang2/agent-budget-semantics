@@ -21,6 +21,16 @@ that pins the replacement, and where the uncorrectable copy still sits.
 | Uncorrectable copy | the v0.5.0 Zenodo deposit description, DOI [10.5281/zenodo.22119569](https://doi.org/10.5281/zenodo.22119569) |
 | Corrected in repo | `cost_divergence.py` module docstring; `.zenodo.json` description, which applies to the next version only |
 
+**Computation basis, disclosed rather than buried.** The 2.6363x figure is computed over the
+modelled iteration-count vector in `cost_divergence.py`, in which the non-enforcing framework is
+scored at its tool-call count. That framework emitted no counter at runtime, so the value standing
+in for it there is a model output and not a measurement. This is the same substitution that
+`results/S2-executed.json` now refuses, where that cell reads `status: uninformative`. The figure is
+therefore a point descriptor of one synthetic per-iteration chargeback model over an eleven-row
+vector, not a measured spread over informative rows, and it is not provider-billed. Recomputing it
+over informative rows only would change a test-pinned constant and is tracked as follow-up work
+rather than done here.
+
 **What went wrong.** Two different numbers were conflated. The module
 docstring carried an illustrative example — one framework reporting 3 budget
 units against another reporting 7, at $0.03 per unit — whose ratio is 7/3, or

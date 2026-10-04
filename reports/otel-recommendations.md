@@ -12,16 +12,25 @@ depending on which framework is instrumented, and one framework emits
 no value at all. Without a mandatory counting semantics enum, the
 attribute is not comparable across implementations.
 
-## Recommendation 1: Mandatory counting_method enum
+## Recommendation 1: do not name a cross-framework consumed count
+
+An earlier revision of this report recommended a mandatory
+`gen_ai.agent.iteration_budget.counting_method` enum. That recommendation
+does not survive its own evidence and is retired. A declared unit makes a
+counter legible; it does not make two counters comparable, because the
+quantities being counted differ. The upstream proposal carrying these
+attributes was closed on 2026-08-27 after maintainer review concluded the
+values are not comparable across implementations with or without a unit.
+
+The units observed are recorded below as measurement, not as a proposed
+enum, since the measurement is the contribution:
 
 ```
-gen_ai.agent.iteration_budget.counting_method
-  Values:
-    - llm_calls          (OpenAI Agents, LlamaIndex, Anthropic)
-    - tool_cycles        (LangChain, CrewAI, ADK, SK)
-    - graph_nodes        (LangGraph)
-    - messages           (AutoGen, Swarm)
-    - not_emitted        (Agno)
+  llm_calls          (OpenAI Agents, LlamaIndex, Anthropic)
+  tool_cycles        (LangChain, CrewAI, ADK, SK)
+  graph_nodes        (LangGraph)
+  messages           (AutoGen, Swarm)
+  not_emitted        (Agno)
 ```
 
 LlamaIndex sits under `llm_calls`, not `tool_cycles`: execution showed
