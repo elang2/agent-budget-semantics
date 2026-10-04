@@ -28,7 +28,7 @@ def cmd_compare(args):
     else:
         print_comparison(
             scenario="S2-budget-exhaustion",
-            budget_limit=3, llm_calls=4, tool_calls=3, total_tokens=478
+            budget_limit=3, llm_calls=4, tool_calls=3, total_tokens=800
         )
 
 
@@ -58,7 +58,7 @@ def cmd_spans(args):
 
     print_telemetry_comparison(
         scenario="S2-budget-exhaustion",
-        budget_limit=3, llm_calls=4, tool_calls=3, total_tokens=478,
+        budget_limit=3, llm_calls=4, tool_calls=3, total_tokens=800,
     )
 
 

@@ -46,8 +46,12 @@ class TestS2GroundTruth:
     def test_tool_calls_is_three(self, s2):
         assert s2["ground_truth"]["tool_calls"] == 3
 
-    def test_tokens_is_478(self, s2):
-        assert s2["ground_truth"]["total_tokens"] == 478
+    def test_tokens_is_800_the_measured_ledger_total(self, s2):
+        # 800 is the ledger sum for the four-call ground-truth workload, read
+        # back from the harness. The scenario script gives 525 at three turns
+        # and 3505 at ten; 478 appears nowhere in it and was the cost model's
+        # 350 + 128 input/output split. See amendment 3 in the results file.
+        assert s2["ground_truth"]["total_tokens"] == 800
 
     def test_budget_limit_is_three(self, s2):
         assert s2["ground_truth"]["budget_limit"] == 3

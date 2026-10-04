@@ -180,7 +180,7 @@ def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
 
 
 def print_comparison(scenario: str = "S2", budget_limit: int = 3,
-                     llm_calls: int = 4, tool_calls: int = 3, total_tokens: int = 478):
+                     llm_calls: int = 4, tool_calls: int = 3, total_tokens: int = 800):
     """Print the divergence table for a scenario."""
     results = simulate_otel_attributes(scenario, llm_calls, tool_calls, total_tokens, budget_limit)
 
@@ -223,7 +223,7 @@ if __name__ == "__main__":
         budget_limit=3,
         llm_calls=4,
         tool_calls=3,
-        total_tokens=478,
+        total_tokens=800,
     )
 
     print("\n")

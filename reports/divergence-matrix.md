@@ -1,6 +1,6 @@
 # Divergence Matrix
 
-**Ground truth:** 4 LLM calls, 3 tool calls, 478 tokens
+**Ground truth:** 4 LLM calls, 3 tool calls, 800 tokens
 **Comparison budget limit:** 3 (utilization denominator for every row)
 
 | Framework | Budget Param | budget | consumed | utilization | Provenance | Counting Method |

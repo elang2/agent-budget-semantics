@@ -182,7 +182,7 @@ See [DIMENSIONS.md](DIMENSIONS.md) for the full taxonomy with per-framework beha
 
 ## Full Conformance Results
 
-### S2: Budget Exhaustion (budget=3, 4 LLM calls, 3 tool calls, 478 tokens)
+### S2: Budget Exhaustion (budget=3, 4 LLM calls, 3 tool calls, 800 tokens)
 
 Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-exhaustion.yaml`.
 

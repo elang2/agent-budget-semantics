@@ -251,7 +251,7 @@ if __name__ == "__main__":
         budget_limit=3,
         llm_calls=4,
         tool_calls=3,
-        total_tokens=478,
+        total_tokens=800,
     )
 
     print("\n")

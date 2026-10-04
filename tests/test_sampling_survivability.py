@@ -72,7 +72,7 @@ def _make_tracer():
 
 # The three inference calls the fake agent will make. Total: 3 iterations,
 # 250 input tokens, 200 output tokens, 450 total. Same shape as the S2
-# baseline in the repo README (llm=4, tokens=478) but simplified for a test.
+# baseline in the repo README (llm=4, tokens=800) but simplified for a test.
 INFERENCE_CALLS = [
     {"input_tokens": 100, "output_tokens": 50},
     {"input_tokens": 80, "output_tokens": 70},

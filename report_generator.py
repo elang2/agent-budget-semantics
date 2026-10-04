@@ -553,7 +553,7 @@ def write_full_report(output_dir: str = "reports"):
     harness_results = _load_harness_results(scenario)
 
     matrix = generate_divergence_matrix(
-        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3,
+        llm_calls=4, tool_calls=3, total_tokens=800, budget_limit=3,
         scenario=scenario, harness_results=harness_results,
     )
     (out / "divergence-matrix.md").write_text(matrix)
@@ -566,7 +566,7 @@ def write_full_report(output_dir: str = "reports"):
 
     report = generate_json_report(
         scenario=scenario,
-        llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3,
+        llm_calls=4, tool_calls=3, total_tokens=800, budget_limit=3,
         harness_results=harness_results,
     )
 

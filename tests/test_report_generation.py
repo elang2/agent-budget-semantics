@@ -37,7 +37,7 @@ SCENARIO = "S2-budget-exhaustion"
 
 # The ground-truth workload write_full_report() publishes. Kept here so a change
 # to either side has to be made deliberately in both.
-GT = dict(llm_calls=4, tool_calls=3, total_tokens=478, budget_limit=3)
+GT = dict(llm_calls=4, tool_calls=3, total_tokens=800, budget_limit=3)
 
 MARKDOWN_ARTIFACTS = [
     "divergence-matrix.md",
@@ -379,10 +379,40 @@ class TestAmendmentsAreDeclared:
         assert entry["new_value"] == s2["frameworks"]["llamaindex"]["unit_observed"]
 
     def test_amendment_targets_resolve(self, s2):
+        """Every amendment target must name a path that exists in this file.
+
+        The rule used to be that a target starts with `frameworks.`, which was
+        true only because every amendment so far had been about a framework
+        row. Amendment 3 targets `ground_truth`, so the narrow rule failed on
+        a correct entry. Resolving the path is the stronger check: it accepts
+        any real location and still rejects a typo or a stale row name, which
+        is what the original was reaching for.
+        """
         for entry in s2["amendments"]:
-            prefix, _, fw = entry["target"].partition(".")
-            assert prefix == "frameworks"
-            assert fw in s2["frameworks"], f"amendment targets unknown row {fw!r}"
+            node, path = s2, entry["target"].split(".")
+            for step in path:
+                assert isinstance(node, dict) and step in node, (
+                    f"amendment {entry['sequence']} targets {entry['target']!r}, "
+                    f"which does not resolve: {step!r} is not a key here"
+                )
+                node = node[step]
+
+    def test_amendment_log_is_append_only_and_sequential(self, s2):
+        """Sequences are 1..N with no gaps and no duplicates.
+
+        The log's stated invariant is append-only. A renumber or an in-place
+        rewrite shows up here as a gap or a repeat, which is cheaper to catch
+        than reading the diff -- and this file has already been edited in
+        place once, between 3621bf2 and 2b52abd.
+        """
+        seqs = [e["sequence"] for e in s2["amendments"]]
+        assert seqs == sorted(seqs), f"amendment sequences out of order: {seqs}"
+        assert seqs == list(range(1, len(seqs) + 1)), (
+            f"amendment sequences must be 1..{len(seqs)} with no gaps, got {seqs}"
+        )
+        for entry in s2["amendments"]:
+            assert entry.get("reason"), f"amendment {entry['sequence']} has no reason"
+            assert "created_at" in entry
 
     def test_revision_did_not_move_the_score(self, s2):
         """The llamaindex prediction stayed wrong under both units, so the

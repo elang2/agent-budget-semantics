@@ -58,3 +58,41 @@ model, not any vendor's published rate card, and the divergence it produces is
 a property of the counting disagreement rather than a bill anyone has
 received. The word carries weight in both the deposit description and here;
 the figure should not be cited as an observed cost.
+
+---
+
+## E2 — ground-truth token total given as 478 where the measured value is 800
+
+**Status.** Corrected in the repository on 2026-10-04. The v0.5.0 Zenodo deposit description
+is minted and still reads "four LLM calls, three tool calls, 478 tokens"; a minted description
+cannot be edited, so this entry is the correction of record, on the same precedent as E1.
+
+**What the figure should be.** The S2 scenario's per-turn token sums are derivable from
+`scenarios/S2-budget-exhaustion.yaml`: turns one to four are 125, 175, 225 and 275, so the
+four-call ground-truth workload is **800 tokens**. Three turns give 525 and all ten give 3505.
+Running `harness.py` against S2 reads 800 from the mock's request ledger for that workload.
+478 appears nowhere in the scenario.
+
+**Where 478 came from.** It is the total of the cost model's reference workload, which is a
+different workload used for the chargeback comparison, not the budget-exhaustion run. It
+reached `ground_truth.total_tokens` in `results/S2-executed.json` and propagated from there
+into the README scenario heading, the divergence-matrix header, `reports/report.json`, four
+call sites that pass it as an argument, the CI gate, and the deposit description.
+
+**Scope of the correction.** No finding moves. Regenerating the full report suite under 478
+and under 800 and diffing the output gives four differing lines, every one of them the figure
+itself: the divergence-matrix header and the `report.json` ground-truth block. Nothing that
+computes a consumed value, a utilization or a cost reads it. The amendment log in
+`results/S2-executed.json` records the change as entry 3 with the derivation.
+
+**Why it survived to publication.** It was pinned by a test named `test_tokens_is_478`, which
+asserted the stored value equalled the literal in its own name. That is a tautology: the test
+could only fail if someone changed the field, and it carried no derivation from the scenario
+the field describes. It is now `test_tokens_is_800_the_measured_ledger_total` and states where
+800 comes from. A constant pinned against itself is not a check.
+
+**A second, smaller discrepancy found while tracing it.** The cost model's reference split is
+stated two ways in the repository, both totalling 478: `cost_divergence.py:205-206` codes
+`input_tokens=350` and `output_tokens=128`, while the module docstring at `:14` and E1 above
+both give "300 input / 178 output". Every published cost figure is computed from the coded
+values, so no cost number is affected, but the prose and the code disagree about the split.

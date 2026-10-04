@@ -38,7 +38,7 @@ jobs:
           results = simulate_otel_attributes(
               scenario_name='S2-budget-exhaustion',
               llm_calls=4, tool_calls=3,
-              total_tokens=478, budget_limit=3,
+              total_tokens=800, budget_limit=3,
           )
           entries = [{'framework': fw, **attrs} for fw, attrs in results.items()]
           enforce_no_synthesis(entries)
