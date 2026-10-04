@@ -47,7 +47,7 @@ After S4/S5 execution, the "Parallel 3 tools" and "Error retry" columns earn the
 
 ## P2: Category-defining artifact
 
-### 2a. S6: Enforcement verification suite
+### 2a. S9: Enforcement verification suite
 
 The question regulators ask: "does the limit actually stop the agent?" Two executed findings already in hand:
 - Agno: enforcement fires, loop ignores it (9 calls past limit of 3)
@@ -58,11 +58,11 @@ One modeled finding (from source-code analysis, not yet executed):
 
 Generalize into: every limit type (iterations, tokens, time, cost) x does-it-actually-stop x can-it-be-evaded. The procurement language already exists in military governance literature: "verify budget enforcement cannot be bypassed."
 
-### 2b. S7: Delegation conservation
+### 2b. S10: Delegation conservation
 
 Does delegated budget respect parent constraints? Agent A has budget=5, delegates to Agent B. Can B spend 10? Tests whether `budget(parent) >= sum(budget(children))` holds. Formally framed by Agent Contracts (arXiv 2601.08815) as conservation laws; empirically unvalidated.
 
-### 2c. S8: Reset/continuation semantics
+### 2c. S11: Reset/continuation semantics
 
 Do counters carry across resume, or reset invisibly? An agent paused at iteration 3 of 5, then resumed. Does it have 2 remaining, or 5 fresh? Demand-specified in the QASkills guide.
 
@@ -94,11 +94,11 @@ Their Table 1 compares governance features across 8 frameworks from documentatio
 
 ### 4b. "When Agents Do Not Stop" (arXiv 2607.01641)
 
-Studies infinite agentic loops across 6,549 repos. Our Agno finding (enforcement fires but agent continues) is a live instance of exactly what they detect statically. Our S6 enforcement suite is the runtime complement to their static IAL-Scan.
+Studies infinite agentic loops across 6,549 repos. Our Agno finding (enforcement is cooperative, with no client-side refusal) is a live instance of exactly what they detect statically. Our S9 enforcement suite is the runtime complement to their static IAL-Scan.
 
 ### 4c. Own paper
 
-Data for the budget-semantics paper is 100% complete for S2. Multi-scenario execution (S4, S5, S6) makes it multi-dimensional. Target venue: ICSE SEIP or ESEC/FSE industry track.
+Data for the budget-semantics paper is 100% complete for S2. Multi-scenario execution (S4, S5, S9) makes it multi-dimensional. Target venue: ICSE SEIP or ESEC/FSE industry track.
 
 ---
 
@@ -130,7 +130,7 @@ If no external CI adoption, citation, or framework-maintainer engagement within 
 | Source | What it holds | What it needs from us |
 |--------|---------------|----------------------|
 | Agent Contracts (2601.08815) | Formal conservation laws for delegation | Executed validation of their docs-based table |
-| When Agents Do Not Stop (2607.01641) | Static detection of infinite loops in 6549 repos | Runtime enforcement measurement (our S6) |
+| When Agents Do Not Stop (2607.01641) | Static detection of infinite loops in 6549 repos | Runtime enforcement measurement (our S9) |
 | hermes-agent #414 | Budget-pressure warning design | What max_iterations means (our matrix) |
 | hermes-agent #75097 | "Iteration budget semantics diverge" | Our entire project is the proof |
 | DSPy #10064 | Nested track_usage under-counts | Same aggregation problem we measure |

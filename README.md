@@ -224,6 +224,39 @@ Pinned versions in [PINS.md](PINS.md). Expectations in `expectations/S2-budget-e
 **Unique `consumed` values: `[3, 4, 5, 8, 10]`** across all eleven rows, of which `[3, 4, 5, 8]` is the executed set. The 10 comes from OpenAI Swarm, which is archived and was never run, so it is a modelled value and the five-value set is not five answers to identical execution.
 Executed results in `results/S2-executed.json`.
 
+#### What `NOT ENFORCED` means for Agno 1.2.5, measured under two providers
+
+Agno's `tool_call_limit` is enforced **cooperatively**. On reaching the limit it sets
+`tool_choice="none"` for subsequent requests and breaks out of the current batch
+(`agno/models/base.py:886` in `run_function_calls` and `:997` in `arun_function_calls`). It has
+no client-side refusal: if the provider returns a tool call anyway, Agno executes it.
+
+So the behaviour depends on the counterparty, and both conditions were run against the same
+pinned version. The figures below are ledger readings, and the per-request ledgers are in
+`results/ledgers/S2-toolchoice-2026-10-04/`.
+
+| Mock provider | LLM calls | Tool calls | `tool_choice: none` sent | Limit held |
+|---|---|---|---|---|
+| ignores `tool_choice` | 10 | 9 | 7, all ignored | no |
+| honours `tool_choice` | 4 | 3 | 1, honoured | yes |
+
+The declared limit was 3 in both. The first row is the original 2026-08-23 condition: the mock
+parsed `model` and `stream` and nothing else, so it was a non-compliant provider, and that
+non-compliance is the **stressor** rather than a confound — a conformant provider hides the
+distinction entirely, which is the second row.
+
+A limit whose effect depends on the counterparty honouring a request is a **declared** limit
+rather than an enforced one, and that holds under both providers. The mechanism is the request
+itself: Agno asks, and nothing in Agno compels. An earlier revision of this file located the
+failure inside Agno's own control flow, which the two-provider measurement rules out. The
+procedure was pre-registered before execution in
+`PREREGISTRATION-S2-tool-choice-2026-10-04.md`, and the amended record, including the withdrawn
+wording verbatim, is in `results/S2-executed.json` under
+`frameworks.agno.verification_tombstone`.
+
+This behaviour has **not** been reported to the Agno maintainers. No upstream issue exists, so the
+finding is unreviewed by anyone who maintains the library.
+
 ### S4: Parallel Tools (3 tools requested in one LLM response) — executed
 
 *Outside the per-cell validity contract; see the `schema.status` note in `results/S2-executed.json`. The Status column below is a run outcome, not a validity verdict.*

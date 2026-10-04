@@ -116,3 +116,35 @@ the figures there are the ones the CLI prints.
 with the code in every figure: it listed four frameworks against the eleven the CLI prints, and an
 annual spread of $97,200 against the $75,600 the code computes. A test now derives the spread from
 `cost_divergence` and asserts the README states it, so the block cannot drift again.
+
+---
+
+## E3 — the append-only amendment log was edited in place
+
+**Status.** Recorded here on 2026-10-04. Not reversible: the edit is in the published history and
+the correct remedy is disclosure, not a rewrite.
+
+**What happened.** `results/S2-executed.json`'s amendment log declares its own invariant, quoting
+the `mutations.jsonl` stream of arXiv:2605.12131: "Entries here are never edited or removed; a
+correction is a new entry with a higher sequence." Between commits `3621bf2` and `2b52abd` the
+sequence-1 entry was edited in place. Its `created_at` changed from `2026-08-23` to `2026-10-03`
+and a `note` key was added.
+
+**The edit was itself a correction, which is what makes it worth recording.** `2026-08-23` was the
+date of the run the amendment describes, not the date the amendment was written, and backdating an
+append-only entry to the event it documents defeats the point of the log. So the content became
+more accurate while the method contradicted the rule stated three lines above it. A new entry with
+a higher sequence would have achieved the same accuracy and left the original legible.
+
+**What has changed since.** Amendments 2 and 3, added 2026-10-04, were appended. Amendment 2
+deliberately leaves the wrong `verification` block verbatim and corrects it from a sibling
+`verification_tombstone`, for exactly this reason. Amendment 3 carries its own derivation. Both
+were written by a script that reads the whole file, appends, and then verifies that no pre-existing
+leaf changed value before writing — 219 leaves checked on amendment 2, and the write refuses
+outright if any differ. A test now also asserts the log's sequences are 1..N with no gaps or
+repeats, so a renumber or a silent rewrite fails the suite.
+
+**The general lesson, which this repository has now hit twice.** A document that declares its own
+construction rule is bound by that rule while it is being written, not only when it is being read.
+The other instance is the test that asserted a stored constant equalled the literal in its own
+name; see E2.
