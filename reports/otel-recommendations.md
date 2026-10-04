@@ -58,9 +58,14 @@ gen_ai.agent.parallel_tool_counting
 ```
 gen_ai.agent.retry_budget_policy
   Values:
-    - retry_consumes     (AutoGen, LangGraph, SK)
-    - retry_free         (CrewAI)
-    - configurable       (LangChain)
+    - retry_consumes     (AutoGen — S5 reading: stopped at budget after 3 calls)
+    - retry_free         (Semantic Kernel — S5 reading: 4 calls, retries not counted; CrewAI — source reading, not run on S5)
+    - configurable       (LangChain — source reading; its S5 run errored at 0 calls)
+    - unclassified       (LangGraph — S5 run completed in 1 call against a 3-call scenario; not evidence either way)
+
+  Only four frameworks were run on S5, and that file sits outside the
+  per-cell validity contract, so every entry above is marked with
+  whether it is a reading or a source reading.
 ```
 
 ## Recommendation 4: Token budget scope

@@ -340,9 +340,24 @@ def generate_otel_recommendations(disagreement_factor: Optional[int] = None,
     lines.append("```")
     lines.append("gen_ai.agent.retry_budget_policy")
     lines.append("  Values:")
-    lines.append("    - retry_consumes     (AutoGen, LangGraph, SK)")
-    lines.append("    - retry_free         (CrewAI)")
-    lines.append("    - configurable       (LangChain)")
+    # Semantic Kernel was listed under retry_consumes against this project's
+    # own S5 data, whose note for that row reads "Retries appear to be free
+    # (not counted)" after 4 LLM calls with stopped_by=completed. LangGraph's
+    # S5 row is also not evidence for retry_consumes: it completed with 1 LLM
+    # call where the scenario scripts 3, and its own note calls that
+    # unexpected, so it is unclassified rather than classified.
+    lines.append("    - retry_consumes     (AutoGen — S5 reading: stopped at budget "
+                 "after 3 calls)")
+    lines.append("    - retry_free         (Semantic Kernel — S5 reading: 4 calls, "
+                 "retries not counted; CrewAI — source reading, not run on S5)")
+    lines.append("    - configurable       (LangChain — source reading; its S5 run "
+                 "errored at 0 calls)")
+    lines.append("    - unclassified       (LangGraph — S5 run completed in 1 call "
+                 "against a 3-call scenario; not evidence either way)")
+    lines.append("")
+    lines.append("  Only four frameworks were run on S5, and that file sits outside the")
+    lines.append("  per-cell validity contract, so every entry above is marked with")
+    lines.append("  whether it is a reading or a source reading.")
     lines.append("```")
     lines.append("")
 
