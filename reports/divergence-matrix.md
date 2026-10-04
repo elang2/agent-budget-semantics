@@ -18,8 +18,8 @@
 | agno | `Agent(tool_call_limit=N)` | 3 | n/a **NOT ENFORCED** | n/a | executed | Each tool-use cycle (unvalidated: no unit observed) |
 
 **Unique consumed values:** `[3, 4, 5, 8, 10]`
-**Disagreement factor:** 5 different answers for same execution
-**Executed rows only:** `[3, 4, 5, 8]` (4 different answers)
+**Spread across all 11 rows:** `[3, 4, 5, 8, 10]` — 5 distinct values, mixing rows that were run with rows predicted from source.
+**Executed rows only:** `[3, 4, 5, 8]` (4 distinct values). This is the only subset in which every value is a reading of the same workload.
 
 ## Reading this table
 

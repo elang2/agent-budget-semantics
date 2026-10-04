@@ -85,9 +85,15 @@ def generate_divergence_matrix(llm_calls: int, tool_calls: int,
 
     lines.append("")
     lines.append(f"**Unique consumed values:** `{sorted(consumed_values)}`")
-    lines.append(f"**Disagreement factor:** {len(consumed_values)} different answers for same execution")
+    # Not "N answers for same execution". Only the executed rows ran, so the
+    # all-rows set mixes readings with predictions and cannot be described as
+    # answers to one execution. The executed subset is the comparable one.
+    lines.append(f"**Spread across all {len(FRAMEWORK_BUDGET_SEMANTICS)} rows:** "
+                 f"`{sorted(consumed_values)}` — {len(consumed_values)} distinct values, "
+                 f"mixing rows that were run with rows predicted from source.")
     lines.append(f"**Executed rows only:** `{sorted(executed_values)}` "
-                 f"({len(executed_values)} different answers)")
+                 f"({len(executed_values)} distinct values). This is the only subset in "
+                 f"which every value is a reading of the same workload.")
     lines.append("")
     lines.append("## Reading this table")
     lines.append("")
@@ -237,12 +243,13 @@ def generate_otel_recommendations(disagreement_factor: Optional[int] = None,
     lines.append("")
     lines.append("The proposed `gen_ai.agent.iteration_budget.consumed` attribute")
     if disagreement_factor is not None:
-        lines.append(f"produces {disagreement_factor} different values for the same execution")
-        lines.append("depending on which framework is instrumented, and one framework emits")
-        lines.append("no value at all. Without a mandatory counting semantics enum, the")
-        lines.append("attribute is not comparable across implementations.")
+        lines.append(f"takes {disagreement_factor} distinct values across the instrumented")
+        lines.append("frameworks, and one framework emits no value at all. Of those values,")
+        lines.append("only the ones from executed rows are readings of the same workload; the")
+        lines.append("rest are predictions from source. Either way the attribute is not")
+        lines.append("comparable across implementations without a declared counting unit.")
     else:
-        lines.append("produces multiple different values for the same execution depending on")
+        lines.append("takes multiple distinct values depending on")
         lines.append("which framework is instrumented. A declared unit would make each")
         lines.append("counter legible without making counters comparable, which is why the")
         lines.append("upstream proposal was withdrawn rather than amended.")

@@ -200,10 +200,17 @@ def print_comparison(scenario: str = "S2", budget_limit: int = 3,
         print(f"{fw:<18} {consumed:<10} {util:<13.1%} {method}{exceeded}")
 
     print(f"\nUnique 'consumed' values: {sorted(consumed_values)}")
-    print(f"Disagreement factor: {len(consumed_values)} different answers for the same execution")
-    print(f"\nThis means gen_ai.agent.iteration_budget.consumed = {sorted(consumed_values)}")
-    print(f"depending on which framework is instrumented. Same work. Same LLM calls.")
-    print(f"Same tokens. {len(consumed_values)} different telemetry values.")
+    # This function is the PREDICTION MODEL, not a run. Every row here is
+    # derived from reading the framework's source, so none of it may be
+    # described as answers to an execution -- and in at least one case the
+    # model and the reading differ: the model gives Agno 3, where the executed
+    # row in results/S2-executed.json reads 10. Use `report` for readings.
+    print(f"Spread: {len(consumed_values)} distinct values across the instrumented frameworks")
+    print("\nThese are MODELLED values, derived from each framework's source for a workload")
+    print(f"of {llm_calls} LLM calls and {tool_calls} tool calls. They are not readings, and")
+    print("where a framework has been executed the reading governs -- notably Agno, modelled")
+    print("here at 3 and observed at 10. For readings see results/S2-executed.json or run")
+    print("`agent-budget-semantics report`.")
 
 
 if __name__ == "__main__":

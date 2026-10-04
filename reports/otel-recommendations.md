@@ -7,10 +7,11 @@ executed rows are differential testing; the modeled rows are predictions.
 ## Problem Statement
 
 The proposed `gen_ai.agent.iteration_budget.consumed` attribute
-produces 5 different values for the same execution
-depending on which framework is instrumented, and one framework emits
-no value at all. Without a mandatory counting semantics enum, the
-attribute is not comparable across implementations.
+takes 5 distinct values across the instrumented
+frameworks, and one framework emits no value at all. Of those values,
+only the ones from executed rows are readings of the same workload; the
+rest are predictions from source. Either way the attribute is not
+comparable across implementations without a declared counting unit.
 
 ## Recommendation 1: do not name a cross-framework consumed count
 

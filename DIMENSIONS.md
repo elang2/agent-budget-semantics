@@ -99,10 +99,18 @@
 
 ## Key Finding
 
-For `gen_ai.agent.iteration_budget.consumed` with the SAME execution
+For `gen_ai.agent.iteration_budget.consumed` measured against ONE workload
 (4 LLM calls, 3 tool calls), the frameworks report different values. These
 are not edge cases or implementation bugs. They are design disagreements
 about what "one iteration" means.
+
+The rows above are not all of one kind, and the distinction is load-bearing:
+some are readings taken from a run against the mock, and the rest are
+predictions derived from reading the framework's source. Only the executed
+subset is a set of answers to the same execution; the full set is a spread
+across implementations, part measured and part modelled. The Provenance
+column in `reports/divergence-matrix.md` says which each row is, and where a
+framework has been executed the reading governs over the model.
 
 The values are deliberately not restated in this file, because a restated
 copy drifts from the data it describes. An earlier revision published
@@ -141,13 +149,21 @@ shared budget attribute is:
 1. Not comparable across frameworks (the primary use case for OTel)
 2. Meaningless for multi-framework dashboards
 3. Incorrect for cost attribution and chargeback
-4. Unstable for alert thresholds (same execution, different consumed values)
+4. Unstable for alert thresholds (one workload, different consumed values)
 5. Misleading for capacity planning
 
-Two directions are consistent with the closure. One is a mandatory
-`gen_ai.agent.iteration_budget.counting_method` enum that classifies
-the framework's counting approach (LLM calls, tool cycles, graph
-nodes, messages, etc.) — floated during the review. The other, which
-the review converged toward, is framework-specific attributes such
+One direction survives the closure, and one was tried and retired. The
+retired one is a mandatory `gen_ai.agent.iteration_budget.counting_method`
+enum classifying each framework's counting approach (LLM calls, tool cycles,
+graph nodes, messages). It was floated during the review and is **no longer
+proposed here**: a declared unit makes each counter legible without making
+any two counters comparable, which is why the upstream proposal was
+withdrawn rather than amended. Naming the unit does not create a common
+denominator, and an attribute that is legible but incomparable still cannot
+drive a cross-framework dashboard, a chargeback split, or an alert
+threshold — the four failures listed above are unchanged by it.
+
+The surviving direction, which the review converged toward, is
+framework-specific attributes such
 as `openai.agent.max_turns` or `langchain.agent.max_iterations` where
 the counting semantics is fixed by definition.

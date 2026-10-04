@@ -495,12 +495,70 @@ class TestReadmeFiguresTrackTheReport:
             f"README matched figure is stale: data gives {len(matched)}/{len(informative)}"
         )
 
-    def test_five_value_set_is_not_called_identical_execution(self, readme_text):
-        # Swarm is archived and never ran, so the 10 is modelled. Two lines in
-        # README carried "5 ... values for identical execution"; neither may.
+    # Three of the eleven rows were never run (Google ADK and Anthropic are
+    # modelled, OpenAI Swarm is archived), so the all-rows value set mixes
+    # readings with predictions and may not be described as answers to one
+    # execution. Both phrasings are banned, because the generator said "same"
+    # where an earlier version of this test forbade only "identical" -- and
+    # that test passed while reports/ carried the claim.
+    BANNED_EXECUTION_PHRASES = ("identical execution", "same execution")
+
+    @staticmethod
+    def _execution_claim_violations(text):
+        """Lines asserting that the full value set answers one execution.
+
+        A negation is allowed, but only when the negator is adjacent to the
+        phrase. The previous rule was `or "not" in line.lower()`, which passed
+        ANY line containing the word "not" anywhere -- so reinstating the
+        banned claim alongside an unrelated "not" passed every test. The
+        adjacency window is what makes this check mean something.
+        """
         import re
-        for m in re.finditer(r"\[3, 4, 5, 8, 10\][^\n]*", readme_text):
-            line = m.group(0)
-            assert "identical execution" not in line or "not" in line.lower(), (
-                f"five-value set still claimed as identical execution: {line[:120]}"
+        violations = []
+        for raw in text.splitlines():
+            low = raw.lower()
+            for phrase in TestReadmeFiguresTrackTheReport.BANNED_EXECUTION_PHRASES:
+                for m in re.finditer(re.escape(phrase), low):
+                    window = low[max(0, m.start() - 40):m.start()]
+                    # The negator must be in the SAME clause as the phrase, so
+                    # the tail may not cross a sentence or clause break. With
+                    # `[^.]*` instead, "this is not a modelled row; 5 answers
+                    # for the same execution" was accepted -- the `not` came
+                    # from the clause before the semicolon. Found by the
+                    # positive control below, not by reading this regex.
+                    if re.search(r"\b(not|never|rather than)\b[^.;,:]*$", window):
+                        continue
+                    violations.append(raw.strip())
+        return violations
+
+    def test_execution_claim_not_made_in_readme_or_reports(self, readme_text):
+        import pathlib
+        targets = {"README.md": readme_text}
+        for p in sorted(pathlib.Path("reports").glob("*.md")):
+            targets[str(p)] = p.read_text()
+        for name, text in targets.items():
+            bad = self._execution_claim_violations(text)
+            assert not bad, (
+                f"{name} claims the value set answers one execution, but three of "
+                f"the eleven rows were never run: {bad[:3]}"
             )
+
+    def test_the_execution_claim_check_can_be_loud(self):
+        # A check that is never shown to fire is indistinguishable from a check
+        # that cannot fire. Both banned phrasings must be caught, the adjacent
+        # negation must be allowed, and -- the case the old assertion missed --
+        # a banned phrase with an unrelated "not" elsewhere on the line must
+        # still be caught.
+        caught = self._execution_claim_violations(
+            "5 different answers for same execution")
+        assert len(caught) == 1, "unqualified 'same execution' not caught"
+        caught = self._execution_claim_violations(
+            "produces 5 different values for the identical execution")
+        assert len(caught) == 1, "unqualified 'identical execution' not caught"
+        assert not self._execution_claim_violations(
+            "the five-value set is not a set of answers to identical execution"
+        ), "adjacent negation should be permitted"
+        assert self._execution_claim_violations(
+            "this is not a modelled row; 5 answers for the same execution"
+        ), "banned phrase slipped through on an unrelated 'not' -- the exact "\
+           "hole the previous assertion had"

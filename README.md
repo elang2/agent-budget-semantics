@@ -244,7 +244,10 @@ Executed results in `results/S5-executed.json`.
 
 ### OTel Telemetry Impact
 
-Same execution, different dashboard:
+One workload, different dashboard. The span counts and structures below are
+**simulated** by `otel_span_capture.py` from each framework's run result, not
+captured from a live OTel exporter, so they are a projection of what each
+framework's instrumentation would emit rather than a recording of what it did:
 
 | Framework | Spans emitted | Structure | Alert at consumed>3? |
 |-----------|--------------|-----------|----------------------|
