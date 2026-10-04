@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "executed_at": "2026-10-04T03:07:01+00:00",
+  "executed_at": "2026-10-04T05:52:50+00:00",
   "preregistration": "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
   "driver": "experiments/S2_toolchoice_rerun.py",
   "mock_server": "mock-llm/server.py with scenarios/S2-budget-exhaustion.yaml (10 turns: 9 tool + 1 text), run once per cell",
@@ -54,7 +54,7 @@
       "stopped_by_under_noncompliant_provider": "error",
       "ledger_calls_ignore_vs_honour": [
         4,
-        10
+        4
       ]
     },
     "openai_agents": {
@@ -212,16 +212,16 @@
       "framework": "crewai",
       "framework_version": "1.15.16",
       "mock_tool_choice_policy": "honour",
-      "ledger_llm_calls": 10,
-      "ledger_tool_calls": 7,
+      "ledger_llm_calls": 4,
+      "ledger_tool_calls": 3,
       "requests_sending_tool_choice_none": 0,
-      "requests_sending_any_tool_choice": 8,
-      "requests_with_tools_absent_or_empty": 2,
-      "honoured_total": 2,
+      "requests_sending_any_tool_choice": 3,
+      "requests_with_tools_absent_or_empty": 1,
+      "honoured_total": 1,
       "honoured_via_tool_choice_none": 0,
-      "honoured_via_tools_absent": 2,
-      "framework_reported_llm_calls": 10,
-      "framework_reported_tool_calls": 7,
+      "honoured_via_tools_absent": 1,
+      "framework_reported_llm_calls": 4,
+      "framework_reported_tool_calls": 3,
       "stopped_by": "natural",
       "ledger_path": "results/ledgers/S2-toolchoice-2026-10-04/crewai-honour.json"
     }

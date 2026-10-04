@@ -251,12 +251,20 @@ by `classify_mechanism()` in `experiments/S2_toolchoice_rerun.py` rather than as
 | openai-agents 0.22.0 | `local_stop` | no | Stopped at 3 LLM / 3 tool calls, `stopped_by: budget`. Sent `tool_choice` zero times and never withdrew `tools`. It does not ask; it stops. |
 | semantic-kernel 1.44.1 | `client_side_refusal` | no | Withdrew `tools` on its fourth request. The provider handed it a tool call anyway; it executed 3 of the 4 offered and returned a text answer. |
 | agno 1.2.5 | `cooperative_request` | **yes** | Sent `tool_choice: none` on 7 requests, all ignored, and executed all 9 tool calls offered. 10 LLM / 9 tool calls under a declared limit of 3. |
-| crewai 1.15.16 | unclassifiable | — | The run errors at this pinned version (a pydantic `TaskOutput.raw` validation error), so its one unexecuted tool call is not evidence of a refusal. |
+| crewai 1.15.16 | unclassified | no | Its limit holds against the conformant provider at 4 LLM / 3 tool, `stopped_by: natural`. The mechanism is unclassified because the *non-compliant* run errors at this pinned version (a pydantic `TaskOutput.raw` validation error), so there is no evidence of whether it would refuse or merely ask. |
 
-Under the **conformant** provider all three classified frameworks land on their declared limit:
-openai-agents 3/3, Semantic Kernel 4/3, Agno 4/3. That is the point. A conformant counterparty
-makes every mechanism look identical, so a measurement taken only against a well-behaved provider
-cannot tell a limit that holds from a limit that merely asks.
+Under the **conformant** provider all four frameworks land on their declared limit:
+openai-agents 3/3, Semantic Kernel 4/3, Agno 4/3, CrewAI 4/3. That is the point. A conformant
+counterparty makes every mechanism look identical, so a measurement taken only against a
+well-behaved provider cannot tell a limit that holds from a limit that merely asks. Only the
+non-compliant arm separates them, and only one framework separates out: Agno.
+
+An earlier revision of this table reported CrewAI at 10 LLM / 7 tool under the conformant
+provider, which would have been a limit failing against a cooperating counterparty and a larger
+finding than the Agno result. It was an artefact of this harness returning a null final answer
+when it suppressed a tool call, which CrewAI read as an unfinished task and retried three times.
+`max_iter=3` was enforcing in every cycle. Fixed, re-run, and recorded in ERRATA E5; no other cell
+moved.
 
 This is R6 stated as a measurement. Agno's limit is **declared**: it sets `tool_choice="none"` at
 the limit and breaks the current batch (`agno/models/base.py:886` in `run_function_calls`, `:997`

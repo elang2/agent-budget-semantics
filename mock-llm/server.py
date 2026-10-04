@@ -165,6 +165,22 @@ class Handler(BaseHTTPRequestHandler):
         # provider, and it is the stressor that distinguishes a framework which
         # refuses client-side from one which only asks the counterparty to stop.
         # Keep both modes: a conformant provider hides the difference.
+        # The content a conformant provider returns when it is asked not to
+        # call tools. Every tool-call entry in the scenarios carries
+        # `content: None`, so suppressing the tool call without substituting
+        # text produced `finish_reason: stop` with a null content -- not a
+        # conformant provider but a malformed one.
+        #
+        # Measured consequence, 2026-10-04: CrewAI read the empty final answer
+        # as an unfinished task and retried, giving three identical cycles of
+        # three tool calls each, 10 requests and 7 tool calls in total. That
+        # was briefly recorded as CrewAI exceeding its limit against a
+        # conformant provider. It was not: max_iter=3 enforced correctly in
+        # every cycle, and the repetition was this bug. See ERRATA E5.
+        HONOURED_CONTENT = (
+            "Final answer: no further tool calls were made, because the caller "
+            "indicated none should be."
+        )
         honoured_tool_choice = False
         if TOOL_CHOICE_POLICY == "honour" and tool_calls is not None:
             if tool_choice_recv == "none" or not tools_present:
@@ -172,6 +188,10 @@ class Handler(BaseHTTPRequestHandler):
                 finish_reason = "stop"
                 honoured_tool_choice = True
                 if not scripted.get("content"):
+                    # Mutate the scripted entry's content for this response
+                    # only, so the single code path below that writes
+                    # message["content"] stays the one source of truth.
+                    scripted = {**scripted, "content": HONOURED_CONTENT}
                     completion_tokens = scripted.get("completion_tokens", 50)
 
         request_id = f"mock-{int(time.time()*1000)}-{SCRIPT_INDEX}"

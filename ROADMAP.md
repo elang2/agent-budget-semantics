@@ -2,7 +2,7 @@
 
 ## Strategic position
 
-This project is the only execution-based instrument for measuring what agent budget limits actually do. Papers compare from documentation. Operators guess from error messages. Frameworks ship enforcement code that doesn't enforce. We run the same work through every framework and report what the counter says.
+This project is the only execution-based instrument for measuring what agent budget limits actually do. Papers compare from documentation. Operators guess from error messages. Frameworks ship limits whose effect depends on the counterparty, and the difference is invisible unless the counterparty is made to misbehave. We run one declared comparison basis through every framework and report what each counter says, and against whom.
 
 Three constituencies route through this:
 1. **Academic papers** cite it because it's the only executed comparison (our own source-code-derived predictions were wrong half the time)
@@ -50,7 +50,7 @@ After S4/S5 execution, the "Parallel 3 tools" and "Error retry" columns earn the
 ### 2a. S9: Enforcement verification suite
 
 The question regulators ask: "does the limit actually stop the agent?" Two executed findings already in hand:
-- Agno: enforcement fires, loop ignores it (9 calls past limit of 3)
+- Agno: enforcement is cooperative. It sets `tool_choice=none` at the limit and has no client-side refusal, so against a provider that ignores the request it reached 9 tool calls across 10 model calls under a declared tool-call limit of 3, i.e. 6 past the limit. Against a conformant provider the limit holds at 3. See ERRATA E5 and results/S2-toolchoice-2026-10-04.json.
 - Semantic Kernel: counter=3 at budget=3, but 4 LLM calls executed (undocumented free final-answer call)
 
 One modeled finding (from source-code analysis, not yet executed):

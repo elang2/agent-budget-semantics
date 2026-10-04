@@ -18,7 +18,7 @@ that pins the replacement, and where the uncorrectable copy still sits.
 | Superseded figure | `2.3x` max/min chargeback divergence |
 | Correct figure | **`2.6363x`** (0.33834 for swarm against 0.12834 for agno) |
 | Pinned by | `tests/test_cost_divergence.py::TestCalculateCostPerFramework::test_chargeback_divergence_paper_workload` |
-| Uncorrectable copy | the v0.5.0 **software** deposit description, DOI [10.5281/zenodo.22605741](https://doi.org/10.5281/zenodo.22605741) — **corrected 2026-10-04**, see the note below |
+| Minted copy | the v0.5.0 **software** deposit description, DOI [10.5281/zenodo.22605741](https://doi.org/10.5281/zenodo.22605741). **Repairable in place** — Zenodo permits metadata edits on a published record under the same DOI, so this is a figure that *was minted with* the error, not one that cannot be corrected. Two corrections to this row on 2026-10-04: the DOI (see below) and the editability. |
 | Corrected in repo | `cost_divergence.py` module docstring; `.zenodo.json` description, which applies to the next version only |
 
 **Correction, 2026-10-04 — this entry named the wrong record.** The DOI given above was
@@ -101,11 +101,35 @@ could only fail if someone changed the field, and it carried no derivation from 
 the field describes. It is now `test_tokens_is_800_the_measured_ledger_total` and states where
 800 comes from. A constant pinned against itself is not a check.
 
-**A second, smaller discrepancy found while tracing it.** The cost model's reference split is
-stated two ways in the repository, both totalling 478: `cost_divergence.py:205-206` codes
-`input_tokens=350` and `output_tokens=128`, while the module docstring at `:14` and E1 above
-both give "300 input / 178 output". Every published cost figure is computed from the coded
-values, so no cost number is affected, but the prose and the code disagree about the split.
+**A second discrepancy found while tracing it — and the claim first made about it was wrong.**
+The cost model's reference split is stated two ways in the repository, both totalling 478:
+`cost_divergence.py:205-206` codes `input_tokens=350` and `output_tokens=128`, while E1 above
+gives "300 input / 178 output". An earlier revision of this paragraph said "every published cost
+figure is computed from the coded values, so no cost number is affected". **That is false, and the
+one figure it exempted is the only one affected.** Measured by executing
+`calculate_cost_per_framework` under both splits with the `enterprise-chargeback` model:
+
+| reference split | cheapest | dearest | ratio | per-run spread |
+|---|---|---|---|---|
+| 300 in / 178 out | 0.12834 | 0.33834 | **2.6363x** | 0.21000 |
+| 350 in / 128 out | 0.12734 | 0.33734 | **2.6491x** | 0.21000 |
+
+**The published ratio, 2.6363x, is computed on the 300/178 split**, which is also what
+`tests/test_cost_divergence.py:124` and `:144` pin. The README's printed cost table uses the coded
+350/128 basis, so a reader dividing `$0.3373` by `$0.1273` gets 2.6491x and finds a figure this
+file does not state — exactly the issue E1 exists to pre-empt. A second test,
+`tests/test_report_generation.py:601`, pins the other split, so two passing tests currently rest on
+two different reference workloads.
+
+**Resolution: 300/178 governs the ratio, because it is the basis already minted**, and the
+divergence is disclosed here rather than silently moved. The 2.6491x figure is correct for the
+printed table and is recorded above so nobody has to re-derive it and wonder which is wrong. The
+docstring at `:14` was changed from 300/178 to 350/128 on 2026-10-04 to match the code, which was
+the right fix for the docstring and does not change which basis the published ratio uses.
+
+**What is genuinely unaffected, verified under both splits:** the per-run spread is `0.21000`
+either way, so the `$6,300` monthly and `$75,600` annual figures in the README and in the CLI
+output are identical on both bases and need no correction.
 
 **Addendum, 2026-10-04 — the disclosure above named only Agno, and the model is wider than that.**
 `cost_divergence.FRAMEWORK_ITERATION_COUNTS` is the source-reading model for every row, not just
@@ -209,3 +233,66 @@ author.
 one concerns the paper's central causal claim about its headline framework, stated four times, in
 the artefact a reader is most likely to cite. Any revision deposited under the concept DOI must
 correct all five passages, and no draft, comment or section text may restate them.
+
+---
+
+## E5 — the `honour` mock returned a null final answer, and CrewAI was briefly misread because of it
+
+**Status.** Found and fixed 2026-10-04, before any public claim rested on it. Nothing was
+published carrying the wrong reading. Recorded because the wrong reading survived two rounds of
+external review, and because the mechanism is worth knowing.
+
+**The defect.** `--tool-choice-policy honour` suppressed a scripted tool call by setting
+`tool_calls = None` and `finish_reason = "stop"`, then fell through to the single response-building
+line, `message["content"] = scripted.get("content", "")`. Every tool-call entry in
+`scenarios/S2-budget-exhaustion.yaml` carries `content: None` explicitly, so `.get` returned
+`None` rather than the `""` default. The mock therefore answered a request with
+`finish_reason: stop` and a **null content** — not a conformant provider, a malformed one.
+
+**What it did to the measurement.** CrewAI 1.15.16 read the empty final answer as an unfinished
+task and retried. Its ledger under `honour` shows three identical cycles of exactly three tool
+calls each followed by a no-tools request: 10 requests, 7 tool calls. That was briefly recorded as
+CrewAI exceeding a declared limit of 3 against a *conformant* provider, which would have been a
+larger finding than the Agno result and would have falsified the general claim that the
+declared-versus-enforced gap only appears against a counterparty that declines to cooperate.
+
+It was none of those things. `max_iter=3` enforced correctly in every cycle — the three-tool-call
+period in the ledger is the limit working. The repetition was this bug.
+
+**Measured before and after**, same pinned versions, same scenario, only the mock changed:
+
+| cell | before | after |
+|---|---|---|
+| `crewai/honour` | 10 LLM / 7 tool, `stopped_by: natural` | **4 LLM / 3 tool, `stopped_by: natural`** |
+| every other cell | unchanged | unchanged |
+
+`agno/ignore` 10/9, `agno/honour` 4/3, `openai_agents` 3/3 under both, `semantic_kernel/ignore`
+4/4 and `/honour` 4/3 are all byte-identical across the fix, so **the Agno finding and the
+three-mechanism taxonomy are unaffected**. The fix substitutes a non-empty final answer, and the
+`ignore` path is untouched by construction.
+
+**Two things this says about the method, which matter more than the row.**
+
+A non-compliant counterparty was deliberately built as the stressor, and the risk of that design
+is building one that is non-compliant in a way nobody intended. A null content was exactly that:
+no framework asks for it, no provider emits it, and one of four frameworks changed behaviour
+because of it. When a result appears only in the arm you modified, suspect the modification.
+
+And the tell was in the data the whole time. A ledger showing 3 tool calls, a text turn, then 3
+more and a text turn, then more, is a loop restarting — not a limit failing. A limit that fails
+produces one long run, which is precisely what `agno/ignore` shows. The periodicity was visible in
+the first ledger dump and was read past, twice, because the aggregate counts were read before the
+per-request sequence.
+
+**Credit where it is due.** The contradiction was flagged in review rather than by any gate: a
+conformant provider should make a cooperative framework stop sooner, not later, and the executed
+row for the same framework from 2026-08-23 says 4 model calls and 3 tool calls. No test in this
+repository would have caught it, because every assertion was about agreement between artefacts and
+this was two artefacts agreeing on a number the apparatus had produced.
+
+**Separately, and found while tracing it:** `stopped_by: "budget_then_finalize"` in
+`results/S2-executed.json`'s crewai row is emitted by no code path. `runners/runner_crewai.py` can
+return only `natural`, `budget` or `error`. It is a fifth hand-authored value alongside
+`counter_at_budget_stop`, `unit_observed`, `mock_confirmed_calls` and `enforced`, and the string
+appears nowhere else in the repository. Today's runs give `error` under `ignore` and `natural`
+under `honour` for that cell, so the recorded stop reason is neither reproducible nor producible.
