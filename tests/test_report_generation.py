@@ -588,6 +588,55 @@ class TestReadmeFiguresTrackTheReport:
         "seven enforce and one does not",
     )
 
+    def test_cards_and_matrix_agree_on_enforcement(self, s2):
+        """A card and the matrix must not disagree about the headline finding.
+
+        The cards rendered the source-reading model alone, so the Agno card
+        said `max_iterations` with no enforcement status while the matrix said
+        `Agent(tool_call_limit=N)` and NOT ENFORCED. Two generated files in
+        one directory, disagreeing. Worse, `max_iterations` is not a parameter
+        agno 1.2.5 has at all.
+        """
+        import pathlib, re
+        cards = pathlib.Path("reports/framework-cards.md").read_text()
+        matrix = pathlib.Path("reports/divergence-matrix.md").read_text()
+        sections = dict(re.findall(r"^## (\S+)\n(.*?)(?=^## |\Z)", cards,
+                                   re.S | re.M))
+        checked = 0
+        for fw, row in s2["frameworks"].items():
+            if row.get("enforced") is not False:
+                continue
+            assert fw in sections, f"no card section for executed framework {fw!r}"
+            assert "NOT ENFORCED" in sections[fw], (
+                f"{fw} is enforced=false in the data but its card does not say "
+                "NOT ENFORCED"
+            )
+            assert re.search(rf"^\|\s*{re.escape(fw)}\s*\|.*NOT ENFORCED", matrix,
+                             re.M), f"{fw} row in the matrix does not say NOT ENFORCED"
+            checked += 1
+        assert checked >= 1, (
+            "no framework has enforced=false, so this test adjudicated nothing; "
+            "if that is now true of the data the test needs rewriting rather than "
+            "passing silently"
+        )
+
+    def test_agno_budget_param_is_one_agno_actually_has(self):
+        """`max_iterations` is not a parameter of agno's Agent at 1.2.5.
+
+        The runner set tool_call_limit correctly and then reported the budget
+        param as `max_iterations` in three places, and the semantics table
+        repeated it. Anyone checking whether Agno enforces `max_iterations`
+        would find no such parameter. Asserted against the source rather than
+        the installed package, so the test is meaningful without agno present.
+        """
+        import pathlib
+        semantics = pathlib.Path("otel_comparison.py").read_text()
+        agno_block = semantics.split('"agno": {', 1)[1].split("}", 1)[0]
+        assert '"budget_param": "tool_call_limit"' in agno_block, agno_block
+        runner = pathlib.Path("runners/runner_agno.py").read_text()
+        assert 'budget_param="max_iterations"' not in runner
+        assert 'budget_param="tool_call_limit"' in runner
+
     @staticmethod
     def _retired_agno_violations(text):
         low = text.lower()

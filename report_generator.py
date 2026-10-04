@@ -205,10 +205,25 @@ def generate_dimension_evidence(scenarios_results: Optional[list] = None) -> str
     return "\n".join(lines)
 
 
-def generate_framework_cards() -> str:
-    """Generate per-framework comparison cards."""
+def generate_framework_cards(scenario: str = "S2-budget-exhaustion") -> str:
+    """Generate per-framework comparison cards.
+
+    The cards used to render FRAMEWORK_BUDGET_SEMANTICS alone, which is the
+    source-reading model and knows nothing about what happened when the
+    framework ran. So the Agno card said `max_iterations` with no enforcement
+    status while the divergence matrix, which prefers the executed reading,
+    said `Agent(tool_call_limit=N)` and `NOT ENFORCED` -- two generated
+    artefacts in the same directory disagreeing about the headline finding.
+    Each card now carries the executed row's provenance and enforcement
+    status, so it cannot drift from the matrix.
+    """
+    executed = _load_harness_results(scenario)
     lines = []
     lines.append("# Framework Budget Semantics Cards")
+    lines.append("")
+    lines.append("Each card's first rows are the source-reading model. `Provenance` and")
+    lines.append("`Enforcement observed` come from the executed run where there is one;")
+    lines.append("where the two disagree about a parameter name, the run governs.")
     lines.append("")
 
     for fw, semantics in FRAMEWORK_BUDGET_SEMANTICS.items():
@@ -218,6 +233,23 @@ def generate_framework_cards() -> str:
         lines.append(f"|----------|-------|")
         for key, value in semantics.items():
             lines.append(f"| {key.replace('_', ' ').title()} | {value} |")
+        row = executed.get(fw)
+        if row is None:
+            lines.append("| Provenance | modeled — not run, so no enforcement observation |")
+        else:
+            lines.append("| Provenance | executed |")
+            observed_param = row.get("budget_param")
+            if observed_param and observed_param != semantics.get("budget_param"):
+                lines.append(f"| Budget Param As Run | `{observed_param}` |")
+            enforced = row.get("enforced")
+            if enforced is False:
+                lines.append("| Enforcement observed | **NOT ENFORCED** — see "
+                             "results/S2-toolchoice-2026-10-04.json for both "
+                             "provider conditions |")
+            elif enforced is True:
+                lines.append("| Enforcement observed | enforced |")
+            else:
+                lines.append("| Enforcement observed | not recorded for this row |")
         lines.append("")
 
     return "\n".join(lines)

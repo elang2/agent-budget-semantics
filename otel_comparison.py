@@ -112,7 +112,7 @@ FRAMEWORK_BUDGET_SEMANTICS = {
         "token_budget": "Not enforced natively",
     },
     "agno": {
-        "budget_param": "max_iterations",
+        "budget_param": "tool_call_limit",
         "iteration_definition": "Each tool-use cycle",
         "what_counts": "Tool-use cycles at agent level; TEAM has separate shared pool",
         "parallel_tools": "Batch = 1 iteration",

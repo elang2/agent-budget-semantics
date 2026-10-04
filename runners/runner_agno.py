@@ -1,7 +1,7 @@
 """
 Agno (formerly Phidata) budget enforcement runner.
 
-Budget primitive: max_iterations on Agent, Team-level budget across agents
+Budget primitive: tool_call_limit on Agent, Team-level budget across agents
 What it counts: Each tool-use cycle as one iteration (similar to CrewAI)
 Unique: Has TEAM-level budget that's shared across multiple agents.
 When Agent A uses 2 iterations and Agent B uses 1, the team has consumed 3.
@@ -17,7 +17,7 @@ from .base import RunResult, default_tool_handler
 
 
 async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
-    """Run scenario through Agno Agent with max_iterations."""
+    """Run scenario through Agno Agent with tool_call_limit."""
     try:
         from agno.agent import Agent
         from agno.models.openai import OpenAIChat
@@ -26,7 +26,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         return RunResult(
             framework="agno",
             scenario=scenario["name"],
-            budget_param="max_iterations",
+            budget_param="tool_call_limit",
             budget_value=budget_value,
             actual_llm_calls=0,
             actual_tool_calls=0,
@@ -81,7 +81,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         return RunResult(
             framework="agno",
             scenario=scenario["name"],
-            budget_param="max_iterations",
+            budget_param="tool_call_limit",
             budget_value=budget_value,
             actual_llm_calls=len(ledger_entries),
             actual_tool_calls=tool_calls_observed,
@@ -99,7 +99,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         return RunResult(
             framework="agno",
             scenario=scenario["name"],
-            budget_param="max_iterations",
+            budget_param="tool_call_limit",
             budget_value=budget_value,
             actual_llm_calls=0,
             actual_tool_calls=tool_calls_observed,

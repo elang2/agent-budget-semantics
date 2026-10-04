@@ -1,5 +1,9 @@
 # Framework Budget Semantics Cards
 
+Each card's first rows are the source-reading model. `Provenance` and
+`Enforcement observed` come from the executed run where there is one;
+where the two disagree about a parameter name, the run governs.
+
 ## autogen
 
 | Property | Value |
@@ -10,6 +14,9 @@
 | Parallel Tools | Each tool result is a separate message = separate turn |
 | Final Answer | Counts as a turn |
 | Token Budget | Not natively enforced (callback-based) |
+| Provenance | executed |
+| Budget Param As Run | `MaxMessageTermination(max_messages=N)` |
+| Enforcement observed | enforced |
 
 ## openai_agents
 
@@ -21,6 +28,9 @@
 | Parallel Tools | Multiple parallel tool calls = 1 turn (1 LLM response) |
 | Final Answer | Counts as a turn |
 | Token Budget | Not enforced |
+| Provenance | executed |
+| Budget Param As Run | `Runner.run(max_turns=N)` |
+| Enforcement observed | enforced |
 
 ## langchain
 
@@ -32,6 +42,9 @@
 | Parallel Tools | Batch of parallel tools = 1 iteration |
 | Final Answer | Does NOT count (free extra call) |
 | Token Budget | Not natively enforced (per-call max_tokens only) |
+| Provenance | executed |
+| Budget Param As Run | `AgentExecutor(max_iterations=N)` |
+| Enforcement observed | enforced |
 
 ## langgraph
 
@@ -43,6 +56,9 @@
 | Parallel Tools | Tool node processes all parallel calls as 1 visit |
 | Final Answer | Counts as a node visit |
 | Token Budget | Not enforced |
+| Provenance | executed |
+| Budget Param As Run | `config={"recursion_limit": N}` |
+| Enforcement observed | enforced |
 
 ## crewai
 
@@ -54,6 +70,9 @@
 | Parallel Tools | N/A (CrewAI doesn't support parallel tool calls) |
 | Final Answer | Gets one forced extra call to produce final_answer |
 | Token Budget | Not enforced (max_rpm is rate limit, not budget) |
+| Provenance | executed |
+| Budget Param As Run | `Agent(max_iter=N)` |
+| Enforcement observed | enforced |
 
 ## adk
 
@@ -65,6 +84,7 @@
 | Parallel Tools | Multiple tools in one loop = 1 iteration |
 | Final Answer | Part of the last iteration |
 | Token Budget | Configurable via callbacks |
+| Provenance | modeled — not run, so no enforcement observation |
 
 ## semantic_kernel
 
@@ -76,6 +96,9 @@
 | Parallel Tools | N parallel tools = 1 attempt (batch is atomic) |
 | Final Answer | Not counted (only tool-invoking rounds count) |
 | Token Budget | max_tokens per call only (not cumulative) |
+| Provenance | executed |
+| Budget Param As Run | `FunctionChoiceBehavior.Auto(maximum_auto_invoke_attempts=N)` |
+| Enforcement observed | enforced |
 
 ## anthropic
 
@@ -87,6 +110,7 @@
 | Parallel Tools | Client decides |
 | Final Answer | Client decides |
 | Token Budget | max_tokens per response (not cumulative, not enforced across loop) |
+| Provenance | modeled — not run, so no enforcement observation |
 
 ## swarm
 
@@ -98,6 +122,7 @@
 | Parallel Tools | Each tool result is a separate message in history |
 | Final Answer | Counts as a message |
 | Token Budget | Not enforced |
+| Provenance | modeled — not run, so no enforcement observation |
 
 ## llamaindex
 
@@ -109,14 +134,20 @@
 | Parallel Tools | Batch = 1 iteration (one LLM response) |
 | Final Answer | Counts as an iteration |
 | Token Budget | Not enforced natively |
+| Provenance | executed |
+| Budget Param As Run | `agent.run(max_iterations=N)` |
+| Enforcement observed | enforced |
 
 ## agno
 
 | Property | Value |
 |----------|-------|
-| Budget Param | max_iterations |
+| Budget Param | tool_call_limit |
 | Iteration Definition | Each tool-use cycle |
 | What Counts | Tool-use cycles at agent level; TEAM has separate shared pool |
 | Parallel Tools | Batch = 1 iteration |
 | Final Answer | Part of normal flow |
 | Token Budget | Cumulative output token budget (unique feature) |
+| Provenance | executed |
+| Budget Param As Run | `Agent(tool_call_limit=N)` |
+| Enforcement observed | **NOT ENFORCED** — see results/S2-toolchoice-2026-10-04.json for both provider conditions |
