@@ -297,15 +297,70 @@ jobs:
           pip install -e ".[${{ matrix.extra }}]"
           python - <<'PIN'
           import pathlib, re, subprocess, sys
+
           runner = "${{ matrix.runner }}"
-          pins = re.findall(
-              r"pip install\s+([A-Za-z0-9._\[\]-]+==[0-9][^\s`]*)",
-              pathlib.Path("PINS.md").read_text(),
-          )
-          if not pins:
+
+          # Which PINS.md line belongs to which runner. Needed because the
+          # previous step installed EVERY pin into EVERY matrix row, so the
+          # crewai row force-downgraded anthropic to 0.39.0 from a different
+          # framework's line and then measured crewai in an environment no
+          # recorded result came from. `runner` was computed and only printed.
+          PRIMARY = {
+              "autogen": "autogen-agentchat",
+              "openai_agents": "openai-agents",
+              "langchain": "langchain",
+              "langgraph": "langgraph",
+              "crewai": "crewai",
+              "adk": "google-adk",
+              "semantic_kernel": "semantic-kernel",
+              "anthropic": "anthropic",
+              "llamaindex": "llama-index-core",
+              "agno": "agno",
+              "swarm": "openai-swarm",
+          }
+          if runner not in PRIMARY:
+              sys.exit(f"no PINS.md mapping for runner {runner!r}; add one to PRIMARY")
+
+          # findall over the whole file with a single-package pattern captured
+          # only the FIRST package on each line, silently dropping autogen-ext,
+          # langchain-openai and llama-index-llms-openai -- so three rows ran
+          # with an unpinned companion package. Parse line by line and take
+          # every pin on the line.
+          lines = {}
+          for raw in pathlib.Path("PINS.md").read_text().splitlines():
+              m = re.match(r"\s*pip install\s+(.+)$", raw)
+              if not m:
+                  continue
+              pins = re.findall(r"[A-Za-z0-9._\[\]-]+==[0-9][^\s`]*", m.group(1))
+              if pins:
+                  lines[pins[0].split("==")[0].lower()] = pins
+
+          if not lines:
               sys.exit("PINS.md yielded no pins; refusing to run unpinned")
-          print(f"pinning {len(pins)} packages from PINS.md for runner {runner}")
+
+          want = PRIMARY[runner].lower()
+          if want not in lines:
+              sys.exit(
+                  f"PINS.md has no `pip install {want}==...` line for runner "
+                  f"{runner!r}; found lines for {sorted(lines)}"
+              )
+
+          pins = lines[want]
+          print(f"runner {runner}: pinning {len(pins)} package(s) -> {pins}")
           subprocess.run(["pip", "install", "--no-deps", *pins], check=True)
+
+          # --no-deps means pip does not verify the pins are mutually
+          # satisfiable, so assert afterwards that each one is the version now
+          # importable. PINS.md carried an unsatisfiable LlamaIndex line
+          # (llms-openai 0.4.6 against core 0.14.24, ResolutionImpossible) for
+          # long enough to be published, and no check would have caught it.
+          import importlib.metadata as md
+          for pin in pins:
+              name, _, ver = pin.partition("==")
+              got = md.version(name)
+              if got != ver:
+                  sys.exit(f"FAIL: {name} pinned {ver} but {got} is installed")
+          print(f"PASS: {len(pins)} pin(s) verified installed at the pinned version")
           PIN
 
       - name: Run S2 scenario

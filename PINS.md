@@ -34,9 +34,23 @@ pip install google-adk==1.2.1
 pip install semantic-kernel==1.44.1
 pip install anthropic==0.39.0
 pip install openai-swarm==0.1.0
-pip install llama-index-core==0.14.24 llama-index-llms-openai==0.4.6
+pip install llama-index-core==0.14.24 llama-index-llms-openai==0.7.10
 pip install agno==1.2.5
 ```
+
+Install one line per framework, not all of them into one environment. Several
+pins conflict with each other across lines — `anthropic==0.39.0` on its own
+line against the newer `anthropic` that `crewai==1.15.16` resolves to, for
+instance — so a single environment holding all eleven is not the environment
+any recorded result was produced in. CI installs exactly the line for the
+framework under test.
+
+The LlamaIndex line previously read `llama-index-llms-openai==0.4.6`, which
+is **unsatisfiable** against `llama-index-core==0.14.24`: pip reports
+`ResolutionImpossible`, because 0.4.6 requires core `<0.13`. Nobody could have
+reproduced the LlamaIndex row by following it. The version actually installed
+when that row was recorded is `0.7.10`, which resolves against the pinned
+core, and that is what the line now says.
 
 ## Tier labels
 
