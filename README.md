@@ -465,7 +465,16 @@ A deterministic mock LLM with a request ledger serves as ground truth. Scripted 
 
 No real LLM API keys are needed, and no request leaves the machine. The derived tables regenerate deterministically from committed inputs with one command, `python report_generator.py`, and CI fails if the committed output no longer matches the generator.
 
-Per-framework execution is weaker than that, and the distinction matters when reading the tables. Reproducing an `executed` row requires the pinned environment in [PINS.md](PINS.md), assembled by hand; each recorded value is a single run rather than a repeated measurement, so run-to-run stability is asserted nowhere; and no row has been independently replicated. Repeat execution is tracked in [ROADMAP.md](ROADMAP.md) and is not done.
+Per-framework execution is weaker than that, and the distinction matters when reading the tables. Reproducing an `executed` row requires the pinned environment in [PINS.md](PINS.md), assembled by hand, and no row has been **independently** replicated — nobody outside this work has run it. Repeat execution is tracked in [ROADMAP.md](ROADMAP.md).
+
+**Run-to-run stability, for the two-provider cells only, is now measured rather than unasserted.**
+All eight cells of `results/S2-toolchoice-2026-10-04.json` were executed twice on 2026-10-04, the
+second time through a driver that asserts it owns the mock it measures against. Comparing the two
+runs field by field, excluding only `executed_at` and the per-request `request_id` and `timestamp`,
+gives **zero** differences in the results file and **zero** across all eight ledgers. Two runs is
+not a distribution, and this says nothing about the S2/S4/S5 rows in the `*-executed.json` files,
+which remain single runs. It does mean the eight cells the enforcement-mechanism finding rests on
+are not a one-off reading.
 
 ## Three Architectural Models
 
