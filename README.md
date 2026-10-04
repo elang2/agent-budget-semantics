@@ -273,9 +273,29 @@ wording verbatim, is in `results/S2-executed.json` under
 
 Two limits on the above. The `enforced` boolean in `results/S2-executed.json` is the author's
 classification and not a reading — no code in `runners/` or `harness.py` produces it, and the same
-is true of `counter_at_budget_stop`, `unit_observed` and `mock_confirmed_calls`. And none of this
-has been reported to the Agno maintainers: no upstream issue exists, so the finding is unreviewed
-by anyone who maintains the library.
+is true of `counter_at_budget_stop`, `unit_observed` and `mock_confirmed_calls`.
+
+And on the upstream status, which is more interesting than either "reported" or "unreported". The
+**behaviour class** — `tool_call_limit` not reliably terminating the loop — is independently
+reported by two different users and remains open:
+
+- [agno-agi/agno#8304](https://github.com/agno-agi/agno/issues/8304), ViniciusRomano,
+  2026-06-08, open: "tool_call_limit does not stop agent loop — unbounded tool-call retries".
+- [agno-agi/agno#9385](https://github.com/agno-agi/agno/issues/9385), TheHonestBob,
+  2026-08-06, open: "tool_choice not removed after tool_call_limit reached, causing infinite loop",
+  against `agno==2.8.7`.
+- [agno-agi/agno#6993](https://github.com/agno-agi/agno/pull/6993), NIK-TIGER-BILL, "fix: break
+  agent loop when all tool calls are blocked by tool_call_limit" — **closed unmerged**
+  2026-04-06.
+
+**None of these is the 1.2.5 mechanism measured here, and none was filed by this author.** #9385
+is a different version and the opposite failure: there Agno skips tool execution but keeps sending
+a user-supplied *forced* `tool_choice`, so the model is compelled to keep asking. At 1.2.5 Agno
+sets `tool_choice="none"` itself — which is what #9385 asks for — and then executes the tool calls
+the provider returns anyway. So the two reports and this measurement are three distinct failures
+of the same parameter across three versions, which is a stronger statement about the parameter
+than any one of them, and a weaker one about this measurement than citing them as corroboration
+would suggest. The 1.2.5 behaviour is unreported upstream.
 
 ### S4: Parallel Tools (3 tools requested in one LLM response) — executed
 

@@ -691,6 +691,12 @@ class TestReadmeFiguresTrackTheReport:
     RETIRED_FRAMING_ALLOWLIST = {
         "results/S2-executed.json",
         "tests/test_report_generation.py",
+        # ERRATA.md quotes the retracted passages verbatim in order to correct
+        # them. An errata file that may not restate what it corrects cannot do
+        # its job -- E4 quotes four sentences from the minted preprint, and a
+        # reader needs to match them against the PDF. Same reasoning as the
+        # tombstone in S2-executed.json: this is the record of the error.
+        "ERRATA.md",
     }
 
     def test_retired_agno_framing_is_nowhere_in_the_tracked_tree(self):

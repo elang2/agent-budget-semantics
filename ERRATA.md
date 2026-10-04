@@ -158,3 +158,54 @@ repeats, so a renumber or a silent rewrite fails the suite.
 construction rule is bound by that rule while it is being written, not only when it is being read.
 The other instance is the test that asserted a stored constant equalled the literal in its own
 name; see E2.
+
+---
+
+## E4 — the published preprint carries both retracted claims in its body
+
+**Status.** Recorded 2026-10-04. The preprint PDF is minted under
+[10.5281/zenodo.22119569](https://doi.org/10.5281/zenodo.22119569) (`agent-budget-paper-v1.pdf`,
+74,564 bytes) and the file cannot be edited in place. This entry is the correction of record.
+Downloaded and text-extracted in full (42,345 characters) rather than reasoned about from the
+record description, which is a separate artefact and separately wrong.
+
+**Four passages locate the failure inside Agno's own control flow.** Quoted verbatim:
+
+1. "the enforcement code fires but the outer loop does not observe its signal, producing a runtime
+   path that terminates only when an external factor intervenes" — Section 2, on *When Agents Do
+   Not Stop*.
+2. "Agno produces no counter value because its enforcement path fires but the outer loop ignores
+   it" — Section 5 results.
+3. "The field exists, propagates to the model, and the enforcement code fires, setting
+   tool_choice='none' after the limit is reached. The outer agent loop does not respect the
+   tool_choice change and continues calling the language model with tools regardless."
+4. "fires the enforcement hook (tool_choice='none' after the limit is reached), and then keeps
+   calling the language model with tools regardless because the outer loop does not check."
+
+All four are wrong in the same way, and the pre-registered two-provider re-run of 2026-10-04
+establishes why: the mock parsed only `model` and `stream` and never read `tool_choice`, so the
+non-compliant party was the **provider**, not Agno's loop. Against a provider that honours
+`tool_choice` the limit holds at 4 model calls and 3 tool calls. Agno's enforcement is a
+cooperative request with no client-side refusal, which is a narrower claim and a better one — a
+limit that depends on the counterparty is a declared limit. See
+`results/S2-toolchoice-2026-10-04.json`, its eight per-request ledgers, and
+`frameworks.agno.verification_tombstone` in `results/S2-executed.json`.
+
+**A fifth passage carries the 478-token figure** as the ground truth: "the underlying work is
+fixed at four language-model calls, three tool calls, and 478 tokens across the whole
+conversation. That fixed cost is the ground truth against which each framework's reported figure
+is compared." The S2 scenario sums to **800** over four turns. See E2.
+
+**What the preprint got right, and the repository did not.** Its Section 5 already cited the
+upstream record — `agno-agi/agno#8304`, `#9385`, and the closed-unmerged fix PR `#6993` — where
+this README until today asserted that no upstream issue existed. That assertion was false and has
+been corrected. The preprint's framing of those issues as "the upstream bug" is itself too strong:
+#9385 is `agno==2.8.7` and reports the opposite failure, in which Agno skips tool execution but
+keeps relaying a user-supplied forced `tool_choice`. Three versions, three distinct failures of
+one parameter; none of the upstream reports is the 1.2.5 mechanism, and none was filed by this
+author.
+
+**Why this matters more than the other entries here.** E1 through E3 concern a figure or a log. This
+one concerns the paper's central causal claim about its headline framework, stated four times, in
+the artefact a reader is most likely to cite. Any revision deposited under the concept DOI must
+correct all five passages, and no draft, comment or section text may restate them.
