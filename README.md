@@ -266,10 +266,34 @@ openai-agents' is enforced without any signalling at all. The three are indistin
 declaration and distinguishable in a ledger.
 
 An earlier revision of this file located Agno's failure inside its own control flow, which the
-two-provider measurement rules out. The procedure was pre-registered before execution in
-`PREREGISTRATION-S2-tool-choice-2026-10-04.md`, and the amended record, including the withdrawn
-wording verbatim, is in `results/S2-executed.json` under
-`frameworks.agno.verification_tombstone`.
+two-provider measurement rules out. The amended record, including the withdrawn wording verbatim,
+is in `results/S2-executed.json` under `frameworks.agno.verification_tombstone`.
+
+**The run was pre-registered, and the claim is checkable rather than asserted.**
+[`PREREGISTRATION-S2-tool-choice-2026-10-04.md`](PREREGISTRATION-S2-tool-choice-2026-10-04.md)
+holds the predictions in §4 — six cells, each with an expected LLM-call and tool-call count. It was
+committed **alone**, as `803c3e8`, one file and 114 insertions with no results and no code. The
+`--tool-choice-policy` flag that makes the second condition possible, and every result file, landed
+18 minutes later in `68838b7`. So the predictions were on record before the mechanism to test them
+existed:
+
+```
+git log --diff-filter=A --format='%h %cI %s' -- PREREGISTRATION-S2-tool-choice-2026-10-04.md
+git log --diff-filter=A --format='%h %cI %s' -- results/S2-toolchoice-2026-10-04.json
+git merge-base --is-ancestor 803c3e8 68838b7 && echo "prediction precedes result"
+```
+
+**The score depends on which column you read, and both are reported here because that dependence
+is the finding.** The §4 table names its columns `actual_llm_calls` and `actual_tool_calls`, which
+in `results/S2-executed.json` are the framework-reported counts. Scored that way, **6 of 6**
+pre-registered cells match. Scored against the ledger, **5 of 6** match: `semantic_kernel/ignore`
+was predicted 4 LLM / 3 tool and the ledger reads 4 / 4.
+
+That is one fact under two columns, not a contradiction. The mock offered a fourth tool call and
+Semantic Kernel did not execute it, so the ledger counts 4 offered and the framework counts 3
+executed. It is also the cell that produced the client-side-refusal finding. Reporting only the
+6-of-6 figure would be the precise error this project exists to document — a count quoted without
+saying which column produced it.
 
 Two limits on the above. The `enforced` boolean in `results/S2-executed.json` is the author's
 classification and not a reading — no code in `runners/` or `harness.py` produces it, and the same
