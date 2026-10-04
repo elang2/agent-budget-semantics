@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "executed_at": "2026-10-04T15:52:11+00:00",
+  "executed_at": "2026-10-04T15:54:27+00:00",
   "preregistration": "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
   "driver": "experiments/S2_toolchoice_rerun.py",
   "mock_server": "mock-llm/server.py with scenarios/S2-budget-exhaustion.yaml (10 turns: 9 tool + 1 text), run once per cell",
@@ -58,17 +58,17 @@
       ]
     },
     "openai_agents": {
-      "mechanism": "client_side_refusal",
+      "mechanism": "local_stop",
       "counterparty_dependent": false,
-      "note": "declined 6 of 9 tool call(s) the non-compliant provider offered",
+      "note": "stopped without signalling the provider at all; sent no tool_choice and never withdrew tools",
       "withdraws_tools": false,
       "signals_tool_choice_none": false,
-      "tool_calls_offered_under_noncompliant_provider": 9,
+      "tool_calls_offered_under_noncompliant_provider": 3,
       "tool_calls_executed_under_noncompliant_provider": 3,
-      "tool_calls_declined": 6,
+      "tool_calls_declined": 0,
       "stopped_by_under_noncompliant_provider": "budget",
       "ledger_calls_ignore_vs_honour": [
-        9,
+        3,
         3
       ]
     },
@@ -133,8 +133,8 @@
       "openai_sdk_version": "3.8.0",
       "openai_sdk_within_framework_declared_range": true,
       "mock_tool_choice_policy": "ignore",
-      "ledger_llm_calls": 9,
-      "ledger_tool_calls": 9,
+      "ledger_llm_calls": 3,
+      "ledger_tool_calls": 3,
       "requests_sending_tool_choice_none": 0,
       "requests_sending_any_tool_choice": 0,
       "requests_with_tools_absent_or_empty": 0,

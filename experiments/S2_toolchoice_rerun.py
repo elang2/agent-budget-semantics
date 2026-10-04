@@ -15,7 +15,7 @@ earlier run could not answer a question that was put to its output:
 3. The resolved version of every framework is recorded, so the file does not
    depend on PINS.md still being true when it is read.
 """
-import asyncio, datetime as dt, json, pathlib, subprocess, sys, time, urllib.request
+import asyncio, datetime as dt, json, pathlib, socket, subprocess, sys, time, urllib.request
 import importlib.metadata as md
 import yaml
 
@@ -24,17 +24,58 @@ DIST = {"agno": "agno", "openai_agents": "openai-agents",
         "semantic_kernel": "semantic-kernel", "crewai": "crewai"}
 
 
+def free_port():
+    """Ask the OS for an unused port instead of guessing one.
+
+    Fixed ports are how a cell ends up talking to a stranger: on 2026-10-04 an
+    orphaned mock on 127.0.0.1:9803 answered the health check for the
+    openai_agents/ignore cell and produced 9 model calls against a recorded 3.
+    """
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        return sk.getsockname()[1]
+
+
 def start(port, policy, scenario_path):
-    p = subprocess.Popen([sys.executable, "mock-llm/server.py", f"--port={port}",
-                          f"--script={scenario_path}", f"--tool-choice-policy={policy}"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Start a mock and PROVE the server answering is the one we started.
+
+    Liveness is not identity. /health returns the server's pid, its policy and
+    its loaded script length; all are asserted against what we asked for, so a
+    foreign server fails the run loudly instead of silently serving the wrong
+    script under the wrong policy.
+    """
+    proc = subprocess.Popen([sys.executable, "mock-llm/server.py", f"--port={port}",
+                             f"--script={scenario_path}", f"--tool-choice-policy={policy}"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    expected_turns = len(yaml.safe_load(pathlib.Path(scenario_path).read_text())["script"])
     for _ in range(40):
+        if proc.poll() is not None:
+            raise SystemExit(
+                f"mock for {policy} exited immediately with code {proc.returncode}; "
+                f"port {port} is probably already in use")
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.4)
-            return p
+            raw = urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/health", timeout=0.4).read()
         except Exception:
             time.sleep(0.2)
-    p.kill()
+            continue
+        h = json.loads(raw)
+        for field, got, want in (("pid", h.get("pid"), proc.pid),
+                                 ("tool_choice_policy", h.get("tool_choice_policy"), policy),
+                                 ("script_turns", h.get("script_turns"), expected_turns)):
+            if got != want:
+                proc.kill()
+                raise SystemExit(
+                    f"the server on port {port} reports {field}={got!r} but we "
+                    f"require {want!r}. Refusing to measure against a server we "
+                    f"do not own: it may carry a different script or policy.")
+        if h.get("ledger_entries"):
+            proc.kill()
+            raise SystemExit(
+                f"mock on {port} already has {h['ledger_entries']} ledger entries "
+                f"before the run started")
+        return proc
+    proc.kill()
     raise SystemExit(f"mock {port} never came up")
 
 
@@ -204,11 +245,11 @@ async def main():
     sp = "scenarios/S2-budget-exhaustion.yaml"
     sc = yaml.safe_load(pathlib.Path(sp).read_text())
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
-    out, port = {}, 9800
+    out = {}
     for fw in ("agno", "openai_agents", "semantic_kernel", "crewai"):
         mod = __import__(f"runners.runner_{fw}", fromlist=["run"])
         for policy in ("ignore", "honour"):
-            port += 1
+            port = free_port()
             proc = start(port, policy, sp)
             r, err = None, None
             try:
@@ -293,4 +334,8 @@ async def main():
     print("\nwrote results/S2-toolchoice-2026-10-04.json")
 
 
-asyncio.run(main())
+# Guarded, because importing this module used to RUN the whole experiment --
+# which rewrote results/ as a side effect of `import`. Discovered while
+# exercising start()'s new ownership check from a test harness.
+if __name__ == "__main__":
+    asyncio.run(main())

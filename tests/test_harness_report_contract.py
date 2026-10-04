@@ -247,3 +247,72 @@ class TestOpenAISdkConflictIsRecorded:
             pins = pathlib.Path("PINS.md").read_text()
             assert "openai" in pins and "incompatibl" in pins.lower(), (
                 "PINS.md must document the shared-dependency conflict")
+
+
+class TestTheDriverOwnsItsServer:
+    """A cell must not be measured against a server the driver did not start.
+
+    On 2026-10-04 an orphaned mock on 127.0.0.1:9803 answered the health check
+    for the openai_agents/ignore cell. The driver's start() polled /health and
+    proceeded on the first healthy answer, so the cell ran against a foreign
+    server with a different script and policy and recorded 9 model calls
+    against a baseline of 3. That wrong value reached a commit.
+    """
+
+    def _driver(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "abs_drv", "experiments/S2_toolchoice_rerun.py")
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_importing_the_driver_does_not_run_the_experiment(self):
+        """The guard that makes every other test in this class safe."""
+        import hashlib, pathlib
+        target = pathlib.Path("results/S2-toolchoice-2026-10-04.json")
+        before = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else None
+        self._driver()
+        after = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else None
+        assert before == after, "importing the driver rewrote the results file"
+
+    def test_free_port_returns_a_bindable_unused_port(self):
+        import socket
+        m = self._driver()
+        port = m.free_port()
+        assert isinstance(port, int) and port > 1024
+        with socket.socket() as sk:
+            sk.bind(("127.0.0.1", port))  # must still be free
+
+    def test_start_refuses_a_server_it_did_not_launch(self):
+        """The control: stand up a foreign mock and assert start() refuses it."""
+        import json as _json
+        import subprocess, sys, time, urllib.request
+        m = self._driver()
+        port = m.free_port()
+        foreign = subprocess.Popen(
+            [sys.executable, "mock-llm/server.py", f"--port={port}",
+             "--script=scenarios/S2-budget-exhaustion.yaml",
+             "--tool-choice-policy=honour"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(40):
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.4)
+                    break
+                except Exception:
+                    time.sleep(0.2)
+            else:
+                pytest.skip("foreign mock never came up")
+            with pytest.raises(SystemExit) as exc:
+                m.start(port, "ignore", "scenarios/S2-budget-exhaustion.yaml")
+            msg = str(exc.value)
+            assert "do not own" in msg or "pid" in msg, msg
+        finally:
+            foreign.kill()
+
+    def test_health_reports_identity_not_just_liveness(self):
+        src = pathlib.Path("mock-llm/server.py").read_text()
+        branch = src.split('elif self.path == "/health":', 1)[1].split("else:", 1)[0]
+        for field in ("pid", "tool_choice_policy", "script_turns", "ledger_entries"):
+            assert field in branch, f"/health must report {field} so a caller can verify ownership"

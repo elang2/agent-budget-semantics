@@ -9,6 +9,7 @@ Key properties:
 """
 
 import json
+import os
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -153,7 +154,22 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/v1/models":
             self._respond(200, {"data": [{"id": "mock-budget-llm", "object": "model"}]})
         elif self.path == "/health":
-            self._respond(200, {"status": "ok"})
+            # Identity, not just liveness. A driver that polls /health and
+            # proceeds on the first healthy answer will happily talk to
+            # SOMEONE ELSE'S mock if its own failed to bind the port -- which
+            # happened on 2026-10-04, when an orphaned server on 127.0.0.1:9803
+            # served the openai_agents/ignore cell and produced 9/9 against a
+            # recorded 3/3. The caller can now assert it owns this process.
+            with LEDGER_LOCK:
+                entries = len(LEDGER)
+            self._respond(200, {
+                "status": "ok",
+                "pid": os.getpid(),
+                "tool_choice_policy": TOOL_CHOICE_POLICY,
+                "script_turns": len(SCRIPT),
+                "script_index": SCRIPT_INDEX,
+                "ledger_entries": entries,
+            })
         else:
             self._respond(404, {"error": "not found"})
 
