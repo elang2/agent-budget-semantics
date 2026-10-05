@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -20,6 +23,31 @@ jobs:
 
       - name: Build package
         run: python -m build
+
+      # The gates belong HERE, not only in ci.yml. This workflow is the one
+      # that uploads, and a PyPI filename is immutable: at b37a7bb the sdist
+      # failed its own suite 9 tests and 1 error, and this workflow would have
+      # published it permanently with no check at all. ci.yml running the same
+      # gate on push is necessary and not sufficient — a release can be cut
+      # from a commit whose CI is stale, red, or never ran.
+      - name: twine check both artefacts
+        run: twine check dist/*
+
+      - name: The sdist must pass its own suite before anything is uploaded
+        # Extracted OUTSIDE the checkout. Inside, it would find the repo's own
+        # .git and reports/ and pass for the wrong reason, which is the exact
+        # failure this gate exists to catch.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sdist-extract
+          tar xzf dist/*.tar.gz -C /tmp/sdist-extract
+          d=$(find /tmp/sdist-extract -maxdepth 1 -mindepth 1 -type d | head -1)
+          test ! -d "$d/.git" || { echo "FAIL: extracted sdist carries a .git"; exit 1; }
+          test -d "$d/reports" || { echo "FAIL: reports/ missing from the sdist"; exit 1; }
+          cd "$d"
+          pip install --quiet ".[dev]"
+          pytest -q
+          echo "PASS: sdist passes its own suite; safe to upload"
 
       - name: Publish to PyPI
         env:
