@@ -177,13 +177,26 @@ Six real-world cost-recording emitters, five distinct attribute schemas for the 
 Emitter                                Layer              Attrs                                        cost.source
 Pydantic AI + Logfire (genai-prices)   client_library     operation.cost                               local
 OpenRouter (cost headers)              gateway            gen_ai.usage.input_cost,output_cost,total    provider
-LiteLLM proxy                          gateway            gen_ai.usage.cost, gen_ai.cost.amount        local
+LiteLLM proxy                          gateway            gen_ai.usage.cost, gen_ai.cost.total_cost+   local
 Direct provider SDK                    client_library     (none)                                       out-of-scope
 Provider-returned cost (hypothetical)  provider_response  (none)                                       provider
+
 Backend enrichment (stale pricing)     backend            gen_ai.usage.cost.amount                     out-of-scope
 
 Distinct attribute schemas: 5
 ```
+The LiteLLM row is the one worth checking against a version. The eleven keys OpenTelemetry's own
+conformance report flags for LiteLLM are `gen_ai.cost.discount_amount`, `.discount_percent`,
+`.input_cost`, `.margin_fixed_amount`, `.margin_percent`, `.margin_total_amount`, `.original_cost`,
+`.output_cost`, `.service_tier`, `.tool_usage_cost` and `.total_cost`, enumerated from
+`docs/data/conformance.json`. An earlier revision of this table named `gen_ai.cost.amount`, which
+appears in neither that report nor LiteLLM's source. Note also that LiteLLM's current `main` has
+moved this family to a `litellm.cost.` prefix (`COST_PREFIX` in
+`litellm/integrations/otel/model/semconv.py`) while keeping `gen_ai.usage.cost` as the metric name,
+so the `gen_ai.cost.*` namespace reflects the version the conformance suite pinned rather than
+today's source. Either way the names are not in the registry, which is the point the table is
+making.
+
 
 Under [PR #443's](https://github.com/open-telemetry/semantic-conventions-genai/pull/443) proposed v0.1 shape, in-scope emitters converge to `gen_ai.usage.cost.amount` + `.currency` + `.source` with the enum `provider | local`. Backend enrichment stays out of scope because its pricing may have drifted since the call, so it cannot claim the same request-time reliability the enum promises.
 

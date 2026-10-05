@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "executed_at": "2026-10-05T02:24:48+00:00",
+  "executed_at": "2026-10-05T02:24:21+00:00",
   "preregistration": "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
   "driver": "experiments/S2_toolchoice_rerun.py",
   "mock_server": "mock-llm/server.py with scenarios/S2-budget-exhaustion.yaml (10 turns: 9 tool + 1 text), run once per cell",

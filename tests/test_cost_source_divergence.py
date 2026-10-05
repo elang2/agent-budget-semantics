@@ -120,7 +120,10 @@ class TestEmissionsFor:
         call = SimulatedCall(model="gpt-4o", input_tokens=100, output_tokens=50)
         cases = emissions_for(call)
         ll = next(c for c in cases if c.name.startswith("LiteLLM"))
-        expected = {"gen_ai.usage.cost", "gen_ai.cost.amount"}
+        # `total_cost`, not `amount`. These two assertions pinned a name that
+        # appears in neither OpenTelemetry's conformance report nor LiteLLM's
+        # source, so they held the emitter to a fiction and went green for it.
+        expected = {"gen_ai.usage.cost", "gen_ai.cost.total_cost"}
         assert set(ll.attributes.keys()) == expected
 
     def test_direct_sdk_emits_no_cost(self):
@@ -143,7 +146,7 @@ class TestEmissionsFor:
         pai = next(c for c in cases if c.name.startswith("Pydantic AI"))
         ll = next(c for c in cases if c.name.startswith("LiteLLM"))
         assert pai.attributes["operation.cost"] == ll.attributes["gen_ai.usage.cost"]
-        assert pai.attributes["operation.cost"] == ll.attributes["gen_ai.cost.amount"]
+        assert pai.attributes["operation.cost"] == ll.attributes["gen_ai.cost.total_cost"]
 
     def test_backend_enrichment_value_drifts(self):
         """Stale-pricing case does NOT match the request-time value."""
@@ -272,3 +275,30 @@ class TestReliabilityCharacteristics:
         cases = emissions_for(call)
         pai = next(c for c in cases if c.name.startswith("Pydantic AI"))
         assert pai.pricing_freshness == "install-time"
+
+
+class TestEmittedNamesAreOnesTheyActuallyUse:
+    """`gen_ai.cost.amount` is not a name any emitter uses.
+
+    It appears in neither OpenTelemetry's published conformance report nor
+    LiteLLM's source, and it was pinned by two tests in this file while the
+    README asserted it too — generated output and prose agreeing on a fiction,
+    which is the defect class of ERRATA E3 and E7. The eleven keys the report
+    actually flags for LiteLLM end in discount_amount, discount_percent,
+    input_cost, margin_fixed_amount, margin_percent, margin_total_amount,
+    original_cost, output_cost, service_tier, tool_usage_cost and total_cost.
+    """
+
+    def test_no_emitter_claims_gen_ai_cost_amount(self):
+        from cost_source_divergence import SimulatedCall, emissions_for
+        call = SimulatedCall(model="gpt-4o", input_tokens=350, output_tokens=128)
+        for case in emissions_for(call):
+            assert "gen_ai.cost.amount" not in case.attributes, (
+                f"{case.name} emits gen_ai.cost.amount, which no real emitter uses")
+
+    def test_the_source_file_does_not_contain_it_either(self):
+        import pathlib
+        src = pathlib.Path("cost_source_divergence.py").read_text()
+        # Allow it inside a comment explaining the retraction; forbid it as a key.
+        assert '"gen_ai.cost.amount"' not in src, (
+            "the string is back as an attribute key")

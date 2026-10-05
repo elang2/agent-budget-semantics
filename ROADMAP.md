@@ -47,7 +47,7 @@ After S4/S5 execution, the "Parallel 3 tools" and "Error retry" columns earn the
 
 ## P2: Category-defining artifact
 
-### 2a. S9: Enforcement verification suite
+### 2a. S13: Enforcement verification suite
 
 The question regulators ask: "does the limit actually stop the agent?" Two executed findings already in hand:
 - Agno: enforcement is cooperative. It sets `tool_choice=none` at the limit and has no client-side refusal, so against a provider that ignores the request it reached 9 tool calls across 10 model calls under a declared tool-call limit of 3, i.e. 6 past the limit. Against a conformant provider the limit holds at 3. See ERRATA E5 and results/S2-toolchoice-2026-10-04.json.
@@ -58,11 +58,11 @@ One modeled finding (from source-code analysis, not yet executed):
 
 Generalize into: every limit type (iterations, tokens, time, cost) x does-it-actually-stop x can-it-be-evaded. The procurement language already exists in military governance literature: "verify budget enforcement cannot be bypassed."
 
-### 2b. S10: Delegation conservation
+### 2b. S14: Delegation conservation
 
 Does delegated budget respect parent constraints? Agent A has budget=5, delegates to Agent B. Can B spend 10? Tests whether `budget(parent) >= sum(budget(children))` holds. Formally framed by Agent Contracts (arXiv 2601.08815) as conservation laws; empirically unvalidated.
 
-### 2c. S11: Reset/continuation semantics
+### 2c. S15: Reset/continuation semantics
 
 Do counters carry across resume, or reset invisibly? An agent paused at iteration 3 of 5, then resumed. Does it have 2 remaining, or 5 fresh? Demand-specified in the QASkills guide.
 
@@ -94,11 +94,11 @@ Their Table 1 compares governance features across 8 frameworks from documentatio
 
 ### 4b. "When Agents Do Not Stop" (arXiv 2607.01641)
 
-Studies infinite agentic loops across 6,549 repos. Our Agno finding (enforcement is cooperative, with no client-side refusal) is a live instance of exactly what they detect statically. Our S9 enforcement suite is the runtime complement to their static IAL-Scan.
+Studies infinite agentic loops across 6,549 repos. Our Agno finding (enforcement is cooperative, with no client-side refusal) is a live instance of exactly what they detect statically. Our S13 enforcement suite is the runtime complement to their static IAL-Scan.
 
 ### 4c. Own paper
 
-Data for the budget-semantics paper is 100% complete for S2. Multi-scenario execution (S4, S5, S9) makes it multi-dimensional. Target venue: ICSE SEIP or ESEC/FSE industry track.
+Data for the budget-semantics paper is 100% complete for S2. Multi-scenario execution (S4, S5, S13) makes it multi-dimensional. Target venue: ICSE SEIP or ESEC/FSE industry track.
 
 ---
 
@@ -130,12 +130,12 @@ If no external CI adoption, citation, or framework-maintainer engagement within 
 | Source | What it holds | What it needs from us |
 |--------|---------------|----------------------|
 | Agent Contracts (2601.08815) | Formal conservation laws for delegation | Executed validation of their docs-based table |
-| When Agents Do Not Stop (2607.01641) | Static detection of infinite loops in 6549 repos | Runtime enforcement measurement (our S9) |
+| When Agents Do Not Stop (2607.01641) | Static detection of infinite loops in 6549 repos | Runtime enforcement measurement (our S13) |
 | hermes-agent #414 | Budget-pressure warning design | What max_iterations means (our matrix) |
 | hermes-agent #75097 | "Iteration budget semantics diverge" | Our entire project is the proof |
-| DSPy #10064 | Nested track_usage under-counts | Same aggregation problem we measure |
-| Pydantic AI #7133 | cost_limit non-deterministic when partial pricing | consumed_at_ground_truth vs counter_at_budget_stop |
+| DSPy #10064 | Nested `track_usage` silently under-counted; **closed 2026-09-15** by PR #10065, shipped in 3.4.0 on 2026-09-25 | Same aggregation problem we measure; now fixed upstream, so cite it as precedent rather than as a live gap |
+| Pydantic AI #7133 | `cost_limit` silently stops covering part of a run when only some responses carry pricing — a silent PARTIAL SUM, not non-determinism (**open** as of 2026-10-04) | A budget enforced over an incomplete total, which is the same defect class as a counter whose unit is undeclared |
 | OTel GenAI #425 | Parent issue: budget governance attributes for invoke_agent | 11-framework differential + accumulator + nested-agent split |
 | OTel GenAI #439 | Spec PR carrying the four attributes (continuation of #426); closed by its author 2026-08-27 after the reviewing maintainer concluded the counts are not comparable with or without a unit | The submitted data is what the conclusion rests on |
 | OTel GenAI #443 | Per-operation cost conventions | 5-unit divergence motivates cost.source |
-| MCP SEP-3004 | Audit record canonicalization | Cross-SDK divergence data |
+| MCP SEP-3004 | Audit record canonicalization; **closed unmerged 2026-09-22** | Cross-SDK divergence data. Closed, so it is prior art and not a live venue |

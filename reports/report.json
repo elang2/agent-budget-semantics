@@ -1,6 +1,6 @@
 {
   "scenario": "S2-budget-exhaustion",
-  "generated": "2026-10-04",
+  "generated": "2026-10-05",
   "ground_truth": {
     "llm_calls": 4,
     "tool_calls": 3,

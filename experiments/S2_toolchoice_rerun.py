@@ -101,13 +101,65 @@ def _within_declared_range(fw):
     return None
 
 
+# Where every numeric field in the output comes from. The vocabulary is fixed
+# so a reader can query provenance instead of trusting a field name, and so a
+# test can forbid the one claim this project keeps making by accident: that a
+# harness counter or a declared constant is a framework self-report.
+#
+#   ledger          read from the mock's per-request ledger
+#   harness_counter incremented by this harness, inside the tool bodies
+#   framework_api   read from a framework's own public counter
+#   declared        a value we configured, echoed back
+#   modelled        computed from a source reading, never observed
+#   hand_authored   typed by a human into a results file
+#
+# `framework_api` is deliberately unused here. No runner reads any framework's
+# internal counter, so nothing in this file may claim it.
+PROVENANCE = {
+    "ledger_llm_calls": "ledger",
+    "ledger_tool_calls": "ledger",
+    "requests_sending_tool_choice_none": "ledger",
+    "requests_sending_any_tool_choice": "ledger",
+    "requests_with_tools_absent_or_empty": "ledger",
+    "honoured_total": "ledger",
+    "honoured_via_tool_choice_none": "ledger",
+    "honoured_via_tools_absent": "ledger",
+    # MISNOMERS, retained because they are cited, corrected here rather than
+    # renamed. `actual_tool_calls` is `tool_calls_observed`, a counter this
+    # harness increments inside each tool body in all eight runners -- it is a
+    # direct count of executions and a better column than any modelled value,
+    # but it is NOT a framework self-report. `actual_llm_calls` is len(ledger)
+    # for four runners and budget_value for openai-agents.
+    "framework_reported_tool_calls": "harness_counter",
+    "framework_reported_llm_calls": "per_runner",
+    "stopped_by": "framework_api",
+    "framework_version": "declared",
+    "openai_sdk_version": "declared",
+    "budget_limit": "declared",
+}
+
+# Which runners derive actual_llm_calls how, read from their source rather than
+# asserted, because a grep for `actual_llm_calls=len(` once reported five and
+# missed semantic_kernel, which assigns through an intermediate variable.
+def _llm_calls_provenance(fw):
+    src = pathlib.Path(f"runners/runner_{fw}.py").read_text()
+    import re
+    if re.search(r"llm_calls\s*=\s*len\(", src):
+        return "ledger"
+    if re.search(r"llm_calls\s*=\s*budget_value", src):
+        return "declared"
+    return "framework_api"
+
+
 def classify_mechanism(cells):
     """Classify each framework's stop mechanism from its own ledgers.
 
-    Derived, not asserted. The point of R6 is that "declared" versus
-    "enforced" is not a binary: what separates these frameworks is how much
-    their limit depends on the counterparty cooperating. Three signals, all
-    read from the ledger:
+    Derived from listed inputs, not asserted — and the inputs are not all
+    ledger reads, which an earlier version of this docstring got wrong. The
+    point of R6 is that "declared" versus "enforced" is not a binary: what
+    separates these frameworks is how much their limit depends on the
+    counterparty cooperating. Each row emits `classified_on`, the tuple it was
+    classified on, with the provenance of each element. Three signals:
 
       - withdraws_tools: did the framework stop advertising `tools`?
       - signals_tool_choice_none: did it ask the provider to stop instead?
@@ -160,6 +212,28 @@ def classify_mechanism(cells):
 
         out[fw] = {
             "mechanism": mechanism,
+            # The tuple the label is a function of, emitted so the label is
+            # checkable rather than trusted. `stopped_by` and the executed
+            # tool count come from the runner, not the ledger, so the earlier
+            # docstring claim that all three signals are "read from the ledger"
+            # was wrong; listing the inputs makes that visible instead of
+            # requiring the reader to take the word "derived" on faith.
+            "classified_on": {
+                "withdraws_tools": withdraws,
+                "signals_tool_choice_none": signals,
+                "tool_calls_offered": offered,
+                "tool_calls_executed": executed,
+                "tool_calls_declined": declined,
+                "stopped_by": ig["stopped_by"],
+                "input_provenance": {
+                    "withdraws_tools": "ledger",
+                    "signals_tool_choice_none": "ledger",
+                    "tool_calls_offered": "ledger",
+                    "tool_calls_executed": "harness_counter",
+                    "tool_calls_declined": "modelled (offered minus executed)",
+                    "stopped_by": "framework_api",
+                },
+            },
             "counterparty_dependent": (
                 None if mechanism == "unclassifiable_run_errored"
                 else mechanism == "cooperative_request"),
@@ -304,6 +378,20 @@ async def main():
                                    "counterparty cooperates.",
             "why_two_policies": "Only the non-compliant provider can distinguish a refusal "
                                 "from a request, because a conformant one satisfies both.",
+        },
+        "field_provenance": {
+            "vocabulary": ["ledger", "harness_counter", "framework_api",
+                           "declared", "modelled", "hand_authored"],
+            "fields": PROVENANCE,
+            "framework_reported_llm_calls_by_framework": {
+                fw: _llm_calls_provenance(fw) for fw in sorted(DIST)},
+            "note": "No field in this file is `hand_authored` or `modelled`. "
+                    "`framework_api` applies only to `stopped_by`. Two field "
+                    "names are misnomers and are kept because they are cited: "
+                    "`framework_reported_tool_calls` is a harness counter, and "
+                    "`framework_reported_llm_calls` is ledger-derived or "
+                    "declared depending on the runner, never a framework "
+                    "counter.",
         },
         "mechanisms": classify_mechanism(out),
         "cells": out,

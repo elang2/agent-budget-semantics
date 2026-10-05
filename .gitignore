@@ -20,6 +20,10 @@ results/*.json
 !results/S4-executed.json
 !results/S5-executed.json
 !results/S2-toolchoice-2026-10-04.json
+# The replication pair. "Two runs, zero differences" is only checkable if both
+# runs are present, so they are evidence and are tracked by name.
+!results/replication/run-a.json
+!results/replication/run-b.json
 .DS_Store
 .env
 

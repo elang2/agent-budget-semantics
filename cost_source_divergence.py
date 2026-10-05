@@ -130,7 +130,13 @@ def emissions_for(call: SimulatedCall) -> list[EmissionCase]:
         layer="gateway",
         attributes={
             "gen_ai.usage.cost": round(litellm_cost, 6),
-            "gen_ai.cost.amount": round(litellm_cost, 6),
+            # `gen_ai.cost.total_cost`, not `gen_ai.cost.amount`. The latter
+            # appears in neither OpenTelemetry's conformance report nor
+            # LiteLLM's source; the report flags eleven real `gen_ai.cost.*`
+            # keys and total_cost is the aggregate one. Emitting the wrong name
+            # here made the CLI print the row the README retracts, which is the
+            # generated-output-drifts-from-prose defect of E3 and E7.
+            "gen_ai.cost.total_cost": round(litellm_cost, 6),
         },
         pr443_source="local",
         reliability_note="Gateway pricing table maintained as configuration.",

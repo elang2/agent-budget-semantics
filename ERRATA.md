@@ -390,9 +390,15 @@ and in E1 through E6 is an instance of it, and so are several outside this repos
 - `detect-secrets` without `--all-files`, which scanned zero files and reported clean;
 - a test that `pytest.skip`-ped when its subject artefact was absent, so deleting the artefact left
   the suite green;
-- and, found while verifying this very entry, a `grep` over extracted tarball bytes that returned
-  nothing because the content was PDF and grep was silently skipping it as binary. The positive
-  control for the word "the" returned empty too, which is the only reason it was caught.
+- a `grep` over extracted tarball bytes that returned nothing because the content was PDF and grep
+  was silently skipping it as binary. The positive control for the word "the" returned empty too,
+  which is the only reason it was caught;
+- and `grep "actual_llm_calls=len("` across `runners/`, which reported five runners and missed
+  Semantic Kernel entirely, because that runner assigns `llm_calls = len(ledger_entries)` on one
+  line and `actual_llm_calls=llm_calls` on another. The pattern asked about a *spelling* when the
+  property was *provenance*, so a true answer about the regex was a false answer about the code.
+  That near-miss reached a handoff draft as "five frameworks" and was caught only by printing the
+  paragraph for a second reader and re-deriving the number runner by runner.
 
 The remedy is the same in every case and it is cheap: make the check prove it can fail. Assert a
 positive control, assert the denominator, assert the exit code, and prefer a check that derives a
