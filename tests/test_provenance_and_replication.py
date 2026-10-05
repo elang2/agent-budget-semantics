@@ -145,3 +145,68 @@ class TestReplicationHasADenominator:
         diffs = [k for k in set(sa) | set(sb) if sa.get(k) != sb.get(k)]
         assert diffs == ["cells"], (
             "the comparison did not notice a planted difference")
+
+
+class TestErrataCrossReferencesResolveToTheRightEntry:
+    """A pointer that names the wrong entry sends a reader to the wrong page.
+
+    `docs/HANDOFF-2026-10-04.md` said "E5 is the harness defect above". The
+    defect it describes above — the mock never reading `tool_choice` — is
+    documented in E4's BODY, under a heading about the published preprint. E5
+    is a different mock defect, the null final answer, which the handoff never
+    mentions. The reference was checked at heading granularity and declared
+    verified; the reference was to a body.
+
+    So this test checks each claim against the body of the entry it names.
+    """
+
+    CLAIMS = {
+        # entry -> a phrase that must appear inside that entry's body
+        "E4": "never read `tool_choice`",
+        "E5": "null final answer",
+        "E6": "did not start",
+        "E7": "broke a neighbour",
+    }
+
+    def _entries(self):
+        import re
+        text = pathlib.Path("ERRATA.md").read_text()
+        heads = [(m.start(), m.group(1)) for m in
+                 re.finditer(r"^## (E\d+)", text, re.M)]
+        out = {}
+        for i, (pos, name) in enumerate(heads):
+            end = heads[i + 1][0] if i + 1 < len(heads) else len(text)
+            out[name] = text[pos:end]
+        return out
+
+    def test_every_named_entry_exists_and_discusses_what_is_claimed(self):
+        entries = self._entries()
+        assert len(entries) >= 7, f"only found {sorted(entries)}"
+        for name, phrase in self.CLAIMS.items():
+            assert name in entries, f"{name} is referenced but does not exist"
+            assert phrase in entries[name], (
+                f"{name} is cited for {phrase!r} but its body does not contain it")
+
+    def test_the_handoff_names_entries_that_match_their_bodies(self):
+        doc = pathlib.Path("docs/HANDOFF-2026-10-04.md")
+        if not doc.exists():
+            pytest.skip("handoff not committed")
+        text = doc.read_text()
+        entries = self._entries()
+        import re
+        # Every "E<n> <description>" claim in the handoff must be satisfiable.
+        for name, phrase in self.CLAIMS.items():
+            if name not in text:
+                continue
+            assert phrase in entries[name], (
+                f"the handoff cites {name}, whose body lacks {phrase!r}")
+        assert "is the harness defect" not in text, (
+            "the old 'E5 is the harness defect above' phrasing is back; it "
+            "depends on paragraph order and named the wrong entry")
+
+    def test_the_check_can_fail(self):
+        """Control: a deliberately wrong pairing must not pass."""
+        entries = self._entries()
+        assert "null final answer" not in entries["E4"], (
+            "E4 should not contain E5's defect; if it does, the entries have "
+            "been merged and this test's premise is gone")
