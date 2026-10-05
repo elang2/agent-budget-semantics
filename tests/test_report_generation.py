@@ -708,9 +708,33 @@ class TestReadmeFiguresTrackTheReport:
         been minted with the next deposit, where it is uncorrectable.
         """
         import pathlib, subprocess
-        tracked = subprocess.run(
-            ["git", "ls-files"], capture_output=True, text=True, check=True
-        ).stdout.split()
+        # `git ls-files` is the right source when there is a git tree, and
+        # there isn't one in an sdist or a Download-ZIP — this test raised
+        # CalledProcessError (exit 128) from the extracted tarball, which is
+        # how the published sdist came to fail its own suite. Git first, with a
+        # filesystem walk as the fallback, and NOT a skip: the comment on
+        # test_every_cell_records_the_sdk_version_and_range_compliance rejects
+        # skipping as a way to let a missing artefact pass, and the same
+        # reasoning applies to a missing .git.
+        tracked = None
+        if pathlib.Path(".git").is_dir():
+            try:
+                tracked = subprocess.run(
+                    ["git", "ls-files"], capture_output=True, text=True, check=True
+                ).stdout.split()
+            except (subprocess.CalledProcessError, OSError):
+                tracked = None
+        if tracked is None:
+            SKIP_DIRS = {".git", ".venv", "__pycache__", "dist", "build",
+                         ".pytest_cache", ".mypy_cache", "node_modules",
+                         ".eggs", "oss"}
+            tracked = []
+            for q in pathlib.Path(".").rglob("*"):
+                if not q.is_file():
+                    continue
+                if set(q.parts) & SKIP_DIRS or q.name.endswith((".pyc", ".so")):
+                    continue
+                tracked.append(str(q))
         offenders, scanned = {}, 0
         for rel in tracked:
             if rel in self.RETIRED_FRAMING_ALLOWLIST:

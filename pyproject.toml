@@ -128,6 +128,15 @@ include = [
     "results/",
     "experiments/",
     "docs/",
+    # reports/ are inputs to the test suite, not just output. Without them
+    # the sdist failed its own suite with 9 FileNotFoundError, and
+    # publish.yml uploads the sdist to an immutable PyPI filename with no
+    # test gate, so the tarball would have been permanently broken.
+    "reports/",
+    "metrics/",
+    "CITATION.cff",
+    "ROADMAP.md",
+    "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
     "cli.py",
     "harness.py",
     "mock_control.py",

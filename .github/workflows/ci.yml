@@ -146,6 +146,30 @@ jobs:
           python cli.py spans
           python cli.py dimensions
 
+      - name: The sdist passes its own suite from an extracted tarball
+        # publish.yml runs `python -m build`, which produces BOTH artefacts,
+        # then `twine upload dist/*` with no test gate. PyPI filenames are
+        # immutable, so an sdist that fails its own suite becomes permanent the
+        # moment a release is cut. At b37a7bb it failed 9 tests and errored 1:
+        # reports/ was absent from the sdist include, and one test shelled out
+        # to `git ls-files`, which exits 128 in a tarball with no .git.
+        #
+        # Extracted OUTSIDE the checkout, because running it inside would find
+        # the repo's own .git and reports/ and pass for the wrong reason.
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet build
+          python -m build --sdist --outdir /tmp/sdist >/dev/null
+          mkdir -p /tmp/sdist-extract
+          tar xzf /tmp/sdist/*.tar.gz -C /tmp/sdist-extract
+          d=$(find /tmp/sdist-extract -maxdepth 1 -mindepth 1 -type d | head -1)
+          test ! -d "$d/.git" || { echo "FAIL: extracted sdist has a .git"; exit 1; }
+          test -d "$d/reports" || { echo "FAIL: reports/ not shipped in the sdist"; exit 1; }
+          cd "$d"
+          pip install --quiet ".[dev]"
+          pytest -q
+          echo "PASS: sdist passes its own suite from an extracted tarball"
+
       - name: Installed wheel reports the reading, not the model
         # Same defect as the container, same silence. A clean `pip install`
         # into a fresh venv, run from a directory with no results/, used to
