@@ -127,6 +127,7 @@ include = [
     "expectations/",
     "results/",
     "experiments/",
+    "docs/",
     "cli.py",
     "harness.py",
     "mock_control.py",
