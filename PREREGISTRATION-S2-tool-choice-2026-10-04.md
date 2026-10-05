@@ -98,6 +98,35 @@ major version above the pin, and a result from it would not be comparable to 202
 substitute control is openai-agents, which is at pin. This is recorded here rather than discovered
 afterwards.
 
+## 5a. What attests the ordering, and what does not
+
+**The ordering is evidenced by commit metadata only. No third party timestamps it.** Stated here
+rather than left for a reader to find, because anyone who knows git will find it.
+
+What is true: this file was added in `803c3e8` as the only change in that commit — one file, 114
+insertions, no code and no results — and the `--tool-choice-policy` flag and every result file
+arrived 18 minutes later in `68838b7`. `git merge-base --is-ancestor 803c3e8 68838b7` passes, so
+the DAG order is fixed and cannot be rewritten without rewriting both commits.
+
+What is **not** true is that anything outside this repository corroborates the 18 minutes. Both
+commits reached GitHub inside a single bulk push, verified against the events API: 22 push events
+are retained back to 2026-09-07 and **neither commit appears individually in any of them**, and the
+retained payloads carry no commit lists at all. So GitHub holds a timestamp for when the push
+arrived and nothing for when either commit was made. Commit dates are author-settable. A reader who
+assumes only that git is honest gets the DAG ordering; a reader who wants an independent clock does
+not get one here.
+
+**What that does and does not weaken.** The predictions in §4 were fixed before the mechanism to
+test them existed — the `honour` branch is in `68838b7`, so §4 cannot have been written against
+results the code could not yet produce. That argument rests on content, not on timestamps, and it
+survives. What does not survive is any claim of third-party attestation, and no such claim should be
+made.
+
+**Fixed for next time.** Push the pre-registration on its own, before executing, so the push event's
+`created_at` timestamps it server-side. That costs one extra push and converts this from an
+author-attested ordering into an externally attested one. It was not done here, and this run cannot
+be retrofitted.
+
 ## 6. Output discipline
 
 `results/S2-executed.json` is **not edited.** The re-run writes a new file carrying its own

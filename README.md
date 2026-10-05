@@ -304,6 +304,17 @@ git log --diff-filter=A --format='%h %cI %s' -- results/S2-toolchoice-2026-10-04
 git merge-base --is-ancestor 803c3e8 68838b7 && echo "prediction precedes result"
 ```
 
+**What attests this, and what does not.** The DAG ordering is fixed and the commit contents are
+checkable, but the 18 minutes rests on commit metadata, which is author-settable, and **no third
+party timestamps it**. Both commits reached GitHub inside a single bulk push: 22 push events are
+retained back to 2026-09-07 and neither commit appears individually in any of them, with no commit
+lists in the retained payloads. The argument that survives is about content rather than clocks —
+the `honour` branch that makes the second condition possible arrives in `68838b7`, so §4 cannot
+have been written against results the code could not yet produce. The argument that does not
+survive is any claim of external attestation. §5a of the pre-registration states this in full, and
+future runs push the pre-registration on its own first so the push event timestamps it
+server-side.
+
 **Which frameworks were run, and which were not.** The pre-registration lists six frameworks
 installable at their pinned versions: agno, crewai, langgraph, llama-index-core, openai-agents and
 semantic-kernel. **Four were run.** LangGraph and LlamaIndex were left out for no reason recorded
