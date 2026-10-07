@@ -16,6 +16,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     """Run scenario through OpenAI Agents SDK with max_turns budget."""
     try:
         from agents import Agent, Runner, function_tool, ModelSettings
+        from agents.exceptions import MaxTurnsExceeded
         from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
         from openai import AsyncOpenAI
     except ImportError as e:
@@ -68,6 +69,22 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
 
     llm_calls = 0
     stopped_by = "natural"
+    error_msg = None
+
+    def ledger_llm_calls():
+        """Request count observed by the mock, as the other runners read it.
+
+        This runner previously set `llm_calls = budget_value` on the
+        budget-stop path, which made `actual_llm_calls` a restatement of the
+        declared limit rather than a measurement. That is why
+        `field_provenance.framework_reported_llm_calls_by_framework` records
+        this runner as `declared` where agno, crewai and semantic_kernel are
+        `ledger`.
+        """
+        import httpx
+        ledger = httpx.get(f"{mock_url}/ledger").json()
+        entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
+        return len(entries)
 
     try:
         result = await Runner.run(
@@ -82,22 +99,27 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         if hasattr(result, 'last_turn') and result.last_turn >= budget_value:
             stopped_by = "budget"
 
-    except Exception as e:
+    except MaxTurnsExceeded as e:
+        # Match the SDK's own exception type, not a substring of its message.
+        # The previous test was `"max turns" in msg or "exceeded" in msg`, which
+        # also matches a rate-limit ("quota exceeded") or a context-length
+        # ("maximum context length exceeded") failure, and would have recorded
+        # either as a clean budget stop.
+        stopped_by = "budget"
         error_msg = str(e)
-        if "max turns" in error_msg.lower() or "exceeded" in error_msg.lower():
-            stopped_by = "budget"
-            llm_calls = budget_value
-        else:
-            return RunResult(
-                framework="openai_agents",
-                scenario=scenario["name"],
-                budget_param="max_turns",
-                budget_value=budget_value,
-                actual_llm_calls=llm_calls,
-                actual_tool_calls=tool_calls_observed,
-                stopped_by="error",
-                error=error_msg,
-            )
+        llm_calls = ledger_llm_calls()
+
+    except Exception as e:
+        return RunResult(
+            framework="openai_agents",
+            scenario=scenario["name"],
+            budget_param="max_turns",
+            budget_value=budget_value,
+            actual_llm_calls=ledger_llm_calls(),
+            actual_tool_calls=tool_calls_observed,
+            stopped_by="error",
+            error=str(e),
+        )
 
     return RunResult(
         framework="openai_agents",
@@ -107,4 +129,5 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         actual_llm_calls=llm_calls,
         actual_tool_calls=tool_calls_observed,
         stopped_by=stopped_by,
+        error=error_msg,
     )
