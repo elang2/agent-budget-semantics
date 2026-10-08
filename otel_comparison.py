@@ -179,6 +179,39 @@ def _calculate_consumed(framework: str, llm_calls: int, tool_calls: int) -> int:
     return iteration_budget_consumed_for(framework, llm_calls, tool_calls)
 
 
+def executed_readings(path: str = "results/S2-toolchoice-2026-10-04.json") -> dict:
+    """Per-arm ledger readings, keyed by framework.
+
+    Read from the artefact rather than restated, because the footer of
+    print_comparison used to carry "observed at 10" as a literal. 10 is the
+    reading under a counterparty that IGNORES the stop request; under one that
+    honours it the same framework reads 4. A single number presented as "the"
+    reading reproduces the arm-ambiguity that the 2026-10-04 retraction was
+    about, and a literal cannot follow the data when the data is re-run.
+    """
+    import json
+    import pathlib as _p
+
+    f = _p.Path(path)
+    if not f.exists():
+        return {}
+    out: dict[str, dict[str, int]] = {}
+    # `cells` is a dict keyed "<framework>/<arm>", not a list. Iterate values,
+    # and tolerate either shape so a schema change degrades to no markers
+    # rather than to a traceback in the first Quick Start command.
+    cells = json.loads(f.read_text()).get("cells", {})
+    rows = cells.values() if isinstance(cells, dict) else cells
+    for cell in rows:
+        if not isinstance(cell, dict):
+            continue
+        fw = cell.get("framework")
+        arm = cell.get("mock_tool_choice_policy")
+        n = cell.get("ledger_llm_calls")
+        if fw and arm and n is not None:
+            out.setdefault(fw, {})[arm] = n
+    return out
+
+
 def print_comparison(scenario: str = "S2", budget_limit: int = 3,
                      llm_calls: int = 4, tool_calls: int = 3, total_tokens: int = 800):
     """Print the divergence table for a scenario."""
@@ -191,13 +224,25 @@ def print_comparison(scenario: str = "S2", budget_limit: int = 3,
     print("-" * 80)
 
     consumed_values = set()
+    readings = executed_readings()
     for fw, attrs in results.items():
         consumed = attrs["gen_ai.agent.iteration_budget.consumed"]
         util = attrs["gen_ai.invoke_agent.iteration_budget.utilization"]
         method = FRAMEWORK_BUDGET_SEMANTICS[fw]["iteration_definition"][:40]
         consumed_values.add(consumed)
         exceeded = " !! EXCEEDED" if consumed > budget_limit else ""
-        print(f"{fw:<18} {consumed:<10} {util:<13.1%} {method}{exceeded}")
+        # A row with a reading is marked IN THE ROW. The footnote alone was not
+        # enough: the first Quick Start command printed Agno's modelled 3 with
+        # no marker, so a reader who ran it saw only the value the README had
+        # retracted.
+        arms = readings.get(fw, {})
+        if arms:
+            detail = ", ".join(f"{a}={arms[a]}" for a in sorted(arms))
+            mark = f"  [MODELLED; executed {detail}]"
+            method = method[:24]
+        else:
+            mark = ""
+        print(f"{fw:<18} {consumed:<10} {util:<13.1%} {method}{exceeded}{mark}")
 
     print(f"\nUnique 'consumed' values: {sorted(consumed_values)}")
     # This function is the PREDICTION MODEL, not a run. Every row here is
@@ -208,9 +253,11 @@ def print_comparison(scenario: str = "S2", budget_limit: int = 3,
     print(f"Spread: {len(consumed_values)} distinct values across the instrumented frameworks")
     print("\nThese are MODELLED values, derived from each framework's source for a workload")
     print(f"of {llm_calls} LLM calls and {tool_calls} tool calls. They are not readings, and")
-    print("where a framework has been executed the reading governs -- notably Agno, modelled")
-    print("here at 3 and observed at 10. For readings see results/S2-executed.json or run")
-    print("`agent-budget-semantics report`.")
+    print("where a framework has been executed the reading governs. Rows carrying a")
+    print("[MODELLED; executed ...] marker have one, per arm: `ignore` is a counterparty")
+    print("that ignores the stop request and `honour` is one that obeys it. The two differ,")
+    print("so neither is 'the' reading on its own. For readings see")
+    print("results/S2-toolchoice-2026-10-04.json or run `agent-budget-semantics report`.")
 
 
 if __name__ == "__main__":

@@ -15,8 +15,37 @@ earlier run could not answer a question that was put to its output:
 3. The resolved version of every framework is recorded, so the file does not
    depend on PINS.md still being true when it is read.
 """
-import asyncio, datetime as dt, json, pathlib, subprocess, sys, time, urllib.request
+import argparse
+import asyncio, datetime as dt, json, os, pathlib, subprocess, sys, time, urllib.request
 import importlib.metadata as md
+
+# CrewAI exports OpenTelemetry spans to telemetry.crewai.com during the run and
+# retries for about a minute when the host is unreachable, which is why its
+# cells take longer than the others. In an experiment whose premise is that the
+# mock's request ledger is the only ground truth, a framework under test
+# shipping traces to a vendor is both a hygiene gap and an undeclared network
+# dependency. Measured: setting these does not change any cell -- the committed
+# values were produced with the export failing.
+#
+# Applied in main(), NOT at import. OTEL_SDK_DISABLED is global, so setting it
+# at module scope leaked into every process that imported this module and took
+# the OTel SDK down with it: it broke two sampling-survivability tests, which
+# legitimately build real spans. Same class as the side-effect-on-import
+# problem recorded at the bottom of this file. main() still runs before any
+# runner is imported, which is the only ordering the frameworks require.
+TELEMETRY_OFF = {
+    "CREWAI_TELEMETRY_OPT_OUT": "true",
+    "OTEL_SDK_DISABLED": "true",
+}
+
+
+def silence_framework_telemetry():
+    """Apply TELEMETRY_OFF, returning what was actually set for the record."""
+    applied = {}
+    for k, v in TELEMETRY_OFF.items():
+        applied[k] = os.environ.get(k, v)
+        os.environ.setdefault(k, v)
+    return applied
 
 from mock_control import MockOwnershipError, assert_owned, free_port
 import yaml
@@ -65,6 +94,24 @@ def ledger(port):
     return d if isinstance(d, list) else d.get("entries", d.get("ledger", []))
 
 
+def _require_version(fw):
+    """Installed version of `fw`'s distribution, or a usable error.
+
+    md.version() raises PackageNotFoundError (surfacing as StopIteration from
+    metadata.distribution on some versions) when a framework is absent. A
+    reader reproducing one cell hits that as a raw traceback naming neither the
+    framework nor the fix.
+    """
+    try:
+        return md.version(DIST[fw])
+    except md.PackageNotFoundError:
+        raise SystemExit(
+            f"{fw} is selected but its distribution {DIST[fw]!r} is not "
+            f"installed. Install it at the pinned version from PINS.md, or "
+            f"restrict the run with --frameworks."
+        ) from None
+
+
 def _openai_version():
     try:
         return md.version("openai")
@@ -88,7 +135,14 @@ def _within_declared_range(fw):
     got = _openai_version()
     if got is None:
         return None
-    for raw in (md.requires(DIST[fw]) or []):
+    try:
+        _reqs = md.requires(DIST[fw]) or []
+    except md.PackageNotFoundError:
+        # Unguarded this raised PackageNotFoundError here and StopIteration from
+        # inside metadata.distribution on some versions -- either way a raw
+        # traceback for the ordinary case of a framework not being installed.
+        return None
+    for raw in _reqs:
         try:
             req = Requirement(raw)
         except Exception:
@@ -260,7 +314,7 @@ def summarise(fw, policy, led, r, err=None):
                        if e.get("tool_choice_honoured") and e.get("tool_choice_received") != "none")
     out = dict(
         framework=fw,
-        framework_version=md.version(DIST[fw]),
+        framework_version=_require_version(fw),
         # The openai SDK is a shared transitive dependency that these
         # frameworks constrain INCOMPATIBLY -- openai-agents 0.22.0 wants
         # openai>=3,<4 while crewai 1.15.16 wants >=2.30,<3 -- so no single
@@ -296,12 +350,53 @@ def summarise(fw, policy, led, r, err=None):
     return out
 
 
-async def main():
+ALL_FRAMEWORKS = ("agno", "openai_agents", "semantic_kernel", "crewai")
+DEFAULT_OUT = pathlib.Path("results/S2-toolchoice-2026-10-04.json")
+
+
+def parse_args(argv=None):
+    ap = argparse.ArgumentParser(
+        description="S2 re-run under both tool_choice policies.",
+        epilog="To reproduce one cell without touching the committed artefact: "
+               "--frameworks crewai --out /tmp/mine.json --ledger-dir /tmp/mine-ledgers",
+    )
+    ap.add_argument("--frameworks", default=",".join(ALL_FRAMEWORKS),
+                    help="comma-separated subset (default: all four)")
+    ap.add_argument("--out", type=pathlib.Path, default=None,
+                    help=f"results path (default: {DEFAULT_OUT})")
+    ap.add_argument("--ledger-dir", type=pathlib.Path, default=None,
+                    help=f"ledger directory (default: {LEDGER_DIR})")
+    a = ap.parse_args(argv)
+    sel = [f.strip() for f in a.frameworks.split(",") if f.strip()]
+    unknown = [f for f in sel if f not in ALL_FRAMEWORKS]
+    if unknown:
+        ap.error(f"unknown framework(s) {unknown}; choose from {list(ALL_FRAMEWORKS)}")
+    if not sel:
+        ap.error("--frameworks selected nothing")
+    # A PARTIAL run must not overwrite a FULL artefact. Writing one cell over an
+    # eight-cell file destroys the other seven silently, and the driver used to
+    # write the committed path unconditionally with no way to redirect it.
+    if a.out is None and set(sel) != set(ALL_FRAMEWORKS):
+        ap.error(
+            f"refusing to write the committed artefact from a partial run "
+            f"({len(sel)} of {len(ALL_FRAMEWORKS)} frameworks). Pass --out "
+            f"(and --ledger-dir) to write elsewhere, or run all of them."
+        )
+    a.frameworks = sel
+    a.out = a.out or DEFAULT_OUT
+    a.ledger_dir = a.ledger_dir if a.ledger_dir is not None else LEDGER_DIR
+    return a
+
+
+async def main(args=None):
+    args = args or parse_args()
+    telemetry_env = silence_framework_telemetry()
+    ledger_dir = args.ledger_dir
     sp = "scenarios/S2-budget-exhaustion.yaml"
     sc = yaml.safe_load(pathlib.Path(sp).read_text())
-    LEDGER_DIR.mkdir(parents=True, exist_ok=True)
+    ledger_dir.mkdir(parents=True, exist_ok=True)
     out = {}
-    for fw in ("agno", "openai_agents", "semantic_kernel", "crewai"):
+    for fw in args.frameworks:
         mod = __import__(f"runners.runner_{fw}", fromlist=["run"])
         for policy in ("ignore", "honour"):
             port = free_port()
@@ -316,7 +411,7 @@ async def main():
             except Exception as e:
                 led = []
                 err = (err or "") + f" | ledger unreadable: {type(e).__name__}"
-            (LEDGER_DIR / f"{fw}-{policy}.json").write_text(json.dumps(led, indent=2))
+            (ledger_dir / f"{fw}-{policy}.json").write_text(json.dumps(led, indent=2))
             out[f"{fw}/{policy}"] = summarise(fw, policy, led, r, err)
             proc.kill()
     # Every field below is computed from the run. Nothing is hand-entered, and
@@ -394,17 +489,30 @@ async def main():
                     "counter.",
         },
         "mechanisms": classify_mechanism(out),
+        "environment": {
+            "framework_telemetry_suppressed": telemetry_env,
+            "note": "Set by the driver before any runner is imported. CrewAI "
+                    "exports spans to telemetry.crewai.com unless opted out, "
+                    "which adds a network dependency and a retry delay to a "
+                    "run whose ground truth is the mock's request ledger. "
+                    "Cells recorded before 2026-10-08 were produced WITHOUT "
+                    "these set, with the export failing; an independent "
+                    "replication reproduced them under that condition, so the "
+                    "values do not depend on it.",
+        },
         "cells": out,
     }
-    pathlib.Path("results/S2-toolchoice-2026-10-04.json").write_text(
-        json.dumps(doc, indent=2) + "\n")
-    pathlib.Path("/tmp/rr3.json").write_text(json.dumps(out, indent=2))
+    # /tmp/rr3.json used to be written here too -- a scratch path from the
+    # original session, left in a driver the README offers as the reproduction
+    # path. Removed rather than parameterised; nothing reads it.
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(doc, indent=2) + "\n")
     print(json.dumps(out, indent=2))
-    print("\nwrote results/S2-toolchoice-2026-10-04.json")
+    print(f"\nwrote {args.out}")
 
 
 # Guarded, because importing this module used to RUN the whole experiment --
 # which rewrote results/ as a side effect of `import`. Discovered while
 # exercising start()'s new ownership check from a test harness.
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(parse_args()))

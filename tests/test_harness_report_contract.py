@@ -4,6 +4,7 @@ All three shared a shape: the apparatus produced a plausible result while
 measuring or reading the wrong thing, and no test could see it.
 """
 import json
+import os
 import pathlib
 import pytest
 
@@ -447,3 +448,125 @@ class TestHarnessRowsDoNotCrashTheReport:
         assert "adk" not in got, (
             "a row with no consumed reading must not be loaded as executed")
         assert "agno" in got, "the curated row must still load"
+
+
+class TestDriverSurfaceAndTelemetry:
+    """Three defects an independent replication found by RUNNING the driver.
+
+    None was reachable by reading the committed artefacts, which is the point:
+    the repo's own gates all passed while the first Quick Start command printed
+    a retracted value and the driver shipped traces to a vendor mid-run.
+    """
+
+    @staticmethod
+    def _driver():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "drv_under_test", "experiments/S2_toolchoice_rerun.py")
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_importing_the_driver_does_not_disable_the_otel_sdk(self):
+        """OTEL_SDK_DISABLED is global; setting it at import scope is a trap.
+
+        The first fix for the CrewAI export set it at module scope, which
+        leaked into every importing process and took two sampling-survivability
+        tests down with it -- those build real spans and legitimately need the
+        SDK. Same class as this driver's documented side-effect-on-import bug.
+        """
+        before = os.environ.get("OTEL_SDK_DISABLED")
+        try:
+            os.environ.pop("OTEL_SDK_DISABLED", None)
+            self._driver()
+            assert "OTEL_SDK_DISABLED" not in os.environ, (
+                "importing the driver disabled the OTel SDK process-wide"
+            )
+        finally:
+            if before is None:
+                os.environ.pop("OTEL_SDK_DISABLED", None)
+            else:
+                os.environ["OTEL_SDK_DISABLED"] = before
+
+    def test_the_opt_out_is_applied_when_called(self):
+        """Negative control for the test above: the setter must still work.
+
+        Without this, 'import does not set it' is satisfied by a driver that
+        never sets it at all, which is the defect rather than the fix.
+        """
+        m = self._driver()
+        saved = {k: os.environ.get(k) for k in m.TELEMETRY_OFF}
+        try:
+            for k in m.TELEMETRY_OFF:
+                os.environ.pop(k, None)
+            m.silence_framework_telemetry()
+            for k, v in m.TELEMETRY_OFF.items():
+                assert os.environ.get(k) == v, f"{k} not applied"
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_a_partial_run_cannot_overwrite_the_committed_artefact(self):
+        """One cell written over an eight-cell file destroys seven silently."""
+        m = self._driver()
+        with pytest.raises(SystemExit):
+            m.parse_args(["--frameworks", "crewai"])
+        a = m.parse_args(["--frameworks", "crewai", "--out", "/tmp/x.json"])
+        assert a.frameworks == ["crewai"] and str(a.out) == "/tmp/x.json"
+        full = m.parse_args(["--frameworks", ",".join(m.ALL_FRAMEWORKS)])
+        assert full.out == m.DEFAULT_OUT, "a full run still writes the artefact"
+
+    def test_an_unknown_framework_is_rejected_by_name(self):
+        m = self._driver()
+        with pytest.raises(SystemExit):
+            m.parse_args(["--frameworks", "not_a_framework"])
+
+    def test_the_driver_writes_no_scratch_path(self):
+        src = pathlib.Path("experiments/S2_toolchoice_rerun.py").read_text()
+        offenders = [ln for ln in src.splitlines()
+                     if "/tmp/" in ln and "write_text" in ln]
+        assert not offenders, f"scratch write left in the driver: {offenders}"
+
+    def test_compare_marks_executed_rows_per_arm(self):
+        """The retracted value must not be printed bare, and not as one arm.
+
+        The footer used to read "observed at 10" as a literal. 10 is the
+        reading under a counterparty that IGNORES the stop request; the same
+        framework reads 4 under one that honours it, so a single number
+        presented as the reading reproduces the arm-ambiguity the 2026-10-04
+        retraction was about.
+        """
+        import io
+        import contextlib
+
+        import otel_comparison
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            otel_comparison.print_comparison(
+                scenario="S2-budget-exhaustion", budget_limit=3,
+                llm_calls=4, tool_calls=3, total_tokens=800)
+        text = buf.getvalue()
+
+        agno = next(l for l in text.splitlines() if l.startswith("agno"))
+        assert "MODELLED; executed" in agno, (
+            "the agno row shows a modelled value with no executed marker"
+        )
+        assert "ignore=10" in agno and "honour=4" in agno, (
+            f"both arms must appear in the row, got: {agno}"
+        )
+        assert "observed at 10" not in text, (
+            "footer still states one arm as 'the' reading"
+        )
+
+    def test_the_markers_come_from_the_artefact_not_a_literal(self):
+        """Control: with no artefact to read, no row may claim a reading."""
+        import otel_comparison
+        assert otel_comparison.executed_readings("/nonexistent.json") == {}
+        real = otel_comparison.executed_readings()
+        assert real.get("agno") == {"honour": 4, "ignore": 10}, (
+            f"readings must be read from the committed cells, got {real.get('agno')}"
+        )
