@@ -338,5 +338,16 @@
       "stopped_by": "natural",
       "ledger_path": "results/ledgers/S2-toolchoice-2026-10-04/crewai-honour.json"
     }
-  }
+  },
+  "amendments": [
+    {
+      "sequence": 1,
+      "created_at": "2026-10-07",
+      "target": "field_provenance.framework_reported_llm_calls_by_framework.openai_agents",
+      "field": "provenance label",
+      "old_value": "declared",
+      "new_value": "declared (describes the code that produced this file; superseded in the working tree)",
+      "reason": "The label is correct for the data in this file and now describes code that no longer exists. Both openai_agents cells carry stopped_by='budget', so under the runner as it stood at executed_at they took a path that assigned actual_llm_calls from budget_value, which is why the label reads 'declared'. Commit 80ae1d8 removed that assignment: the budget path now reads the mock's request ledger, so an equivalent future run would record 'ledger' on that path. The runner is now PATH-DEPENDENT - the success path still counts result.raw_responses, which is a framework API read - so no single label describes it. No recorded value changes: the declared limit, the independently-measured ledger count and the runner's reported count are all 3 in both cells, so the superseded assignment happened to coincide with the measurement. Recorded as an amendment rather than by editing the label, because the label is a true statement about how this file was produced."
+    }
+  ]
 }

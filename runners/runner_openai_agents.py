@@ -71,20 +71,28 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
     stopped_by = "natural"
     error_msg = None
 
-    def ledger_llm_calls():
+    def ledger_llm_calls(fallback=0):
         """Request count observed by the mock, as the other runners read it.
 
-        This runner previously set `llm_calls = budget_value` on the
+        This runner previously set `llm_calls` to the budget value on the
         budget-stop path, which made `actual_llm_calls` a restatement of the
-        declared limit rather than a measurement. That is why
-        `field_provenance.framework_reported_llm_calls_by_framework` records
-        this runner as `declared` where agno, crewai and semantic_kernel are
-        `ledger`.
+        declared limit rather than a measurement.
+
+        NEVER RAISES, and that is load-bearing rather than defensive. Both call
+        sites are inside an `except` block. An unreachable mock is the likeliest
+        cause of the original exception, so a transport error here would replace
+        the real failure and escape `run()` — and `harness.py` does not guard a
+        runner exception, so the scenario loop would abort instead of recording
+        an error row. On failure it returns `fallback` so the caller keeps the
+        count it already observed.
         """
-        import httpx
-        ledger = httpx.get(f"{mock_url}/ledger").json()
-        entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
-        return len(entries)
+        try:
+            import httpx
+            ledger = httpx.get(f"{mock_url}/ledger", timeout=5.0).json()
+            entries = ledger.get("entries", ledger) if isinstance(ledger, dict) else ledger
+            return len(entries)
+        except Exception:
+            return fallback
 
     try:
         result = await Runner.run(
@@ -107,7 +115,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
         # either as a clean budget stop.
         stopped_by = "budget"
         error_msg = str(e)
-        llm_calls = ledger_llm_calls()
+        llm_calls = ledger_llm_calls(fallback=llm_calls)
 
     except Exception as e:
         return RunResult(
@@ -115,7 +123,7 @@ async def run(scenario: dict, mock_url: str, budget_value: int) -> RunResult:
             scenario=scenario["name"],
             budget_param="max_turns",
             budget_value=budget_value,
-            actual_llm_calls=ledger_llm_calls(),
+            actual_llm_calls=ledger_llm_calls(fallback=llm_calls),
             actual_tool_calls=tool_calls_observed,
             stopped_by="error",
             error=str(e),

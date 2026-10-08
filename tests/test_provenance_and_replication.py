@@ -58,23 +58,82 @@ class TestProvenanceIsDeclared:
         assert fp["framework_reported_llm_calls"] != "framework_api"
 
     def test_the_llm_calls_provenance_matches_the_runner_source(self, doc):
-        """Derive it independently, because a grep once got this wrong.
+        """Derive it independently from the AST, not from the source text.
 
         `grep 'actual_llm_calls=len('` reported five runners and missed
-        semantic_kernel, which assigns through an intermediate variable. This
-        reads the same property a different way.
+        semantic_kernel, which assigns through an intermediate variable. The
+        text-regex replacement that followed was worse: it keyed on
+        `llm_calls = budget_value`, which a COMMENT describing the removal of
+        that assignment also satisfies. On 2026-10-07 the regex was being met
+        by a docstring explaining the defect rather than by the defect, so the
+        gate passed for the wrong reason and correcting the stale label made it
+        fail. Prose cannot be the discriminator. This reads the expressions
+        actually passed to `actual_llm_calls` and resolves local names.
         """
+        import ast
+
+        def derive(fw):
+            tree = ast.parse(pathlib.Path(f"runners/runner_{fw}.py").read_text())
+            fn = next(n for n in ast.walk(tree)
+                      if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef))
+                      and n.name == "run")
+            # local name -> set of assigned expressions, so an intermediate
+            # variable resolves instead of being classified as a self-report
+            assigns = {}
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Assign):
+                    for t in n.targets:
+                        if isinstance(t, ast.Name):
+                            assigns.setdefault(t.id, set()).add(ast.unparse(n.value))
+                elif isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name):
+                    # `llm_calls += 1` while iterating result.raw_responses is a
+                    # framework API read and a production path in its own right.
+                    # Walking only ast.Assign missed it, so this derivation
+                    # under-reported openai_agents as single-path 'ledger' when
+                    # it is path-dependent. Recorded because the omission made
+                    # the test quieter than it looks.
+                    assigns.setdefault(n.target.id, set()).add("augmented_in_place")
+            exprs = set()
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "RunResult":
+                    for kw in n.keywords:
+                        if kw.arg == "actual_llm_calls":
+                            exprs.add(ast.unparse(kw.value))
+            def classify(expr):
+                if "ledger" in expr:
+                    return "ledger"
+                if "budget_value" in expr:
+                    return "declared"
+                return "framework_api"   # incl. augmented_in_place
+
+            kinds = set()
+            for e in exprs:
+                if e == "0":
+                    continue                      # the import-failure stub
+                for r in assigns.get(e, {e}):
+                    if r == "0":
+                        continue                  # same stub, reached via a name
+                    kinds.add(classify(r))
+            return kinds
+
         claimed = doc["field_provenance"]["framework_reported_llm_calls_by_framework"]
+        amended = {a["target"].rsplit(".", 1)[-1]
+                   for a in doc.get("amendments", [])
+                   if "framework_reported_llm_calls_by_framework" in a.get("target", "")}
         for fw, prov in claimed.items():
-            src = pathlib.Path(f"runners/runner_{fw}.py").read_text()
-            if re.search(r"llm_calls\s*=\s*len\(", src):
-                expected = "ledger"
-            elif re.search(r"llm_calls\s*=\s*budget_value", src):
-                expected = "declared"
-            else:
-                expected = "framework_api"
-            assert prov == expected, (
-                f"{fw}: file claims {prov!r}, runner source says {expected!r}")
+            kinds = derive(fw)
+            if prov in kinds and len(kinds) == 1:
+                continue                          # one path, label matches it
+            # Either the label names a path the current source does not produce,
+            # or the runner has several paths and one label cannot describe them
+            # all. Both are acceptable ONLY if disclosed, because this file
+            # records a run that already happened and its label is a true
+            # statement about how it was produced — not about today's source.
+            assert fw in amended, (
+                f"{fw}: file claims {prov!r} but the AST of runners/runner_{fw}.py derives "
+                f"{sorted(kinds)!r}. A label the current source cannot produce, or a runner "
+                f"with several production paths, must be disclosed in `amendments`. No "
+                f"amendment targets {fw}.")
 
     def test_the_mechanism_label_lists_its_evidence(self, doc):
         for fw, m in doc["mechanisms"].items():
