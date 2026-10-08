@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 
 import pytest
 
@@ -269,3 +270,108 @@ class TestErrataCrossReferencesResolveToTheRightEntry:
         assert "null final answer" not in entries["E4"], (
             "E4 should not contain E5's defect; if it does, the entries have "
             "been merged and this test's premise is gone")
+
+
+class TestAmendmentLogIntegrity:
+    """The toolchoice amendment log was outside every append-only contract.
+
+    `test_report_generation.py` enforces sequencing and required fields against
+    `S2-executed.json` only, so this file's log had neither -- which is how it
+    came to carry an abbreviated SHA that no published ref resolves, and an
+    entry missing `revised_after_execution`. ERRATA E3 records the same log
+    class being edited in place once already; a contract enforced for one file
+    and not its sibling is how that recurs.
+    """
+
+    @staticmethod
+    def _log():
+        return json.loads(TC.read_text()).get("amendments", [])
+
+    def test_sequences_are_1_to_n_with_no_gaps(self):
+        seqs = [e["sequence"] for e in self._log()]
+        assert seqs == list(range(1, len(seqs) + 1)), (
+            f"append-only log must be 1..N with no gaps or repeats, got {seqs}"
+        )
+
+    def test_every_entry_carries_the_required_fields(self):
+        """Entry 1 predates the contract and omits `revised_after_execution`.
+
+        It is NOT backfilled -- the log is append-only -- so the field is
+        required from sequence 2 onward and entry 1's value is declared in the
+        entry that supersedes it.
+        """
+        for e in self._log():
+            for f in ("sequence", "created_at", "target", "field",
+                      "old_value", "new_value", "reason"):
+                assert f in e, f"amendment {e.get('sequence')} missing {f}"
+            if e["sequence"] >= 2:
+                assert isinstance(e.get("revised_after_execution"), bool), (
+                    f"amendment {e['sequence']} missing revised_after_execution"
+                )
+
+    def test_no_unresolvable_commit_id_in_a_current_value(self):
+        """A SHA a reader cannot resolve is worse than no SHA.
+
+        Scope is deliberately narrow, because an append-only correction must
+        QUOTE the value it corrects. Exempt: `old_value`, which holds the
+        defect by construction, and the `reason` of any entry a later entry
+        targets. Everything else is a live claim and must resolve from HEAD --
+        reachability, not mere existence, since a rebased commit lingers in the
+        local reflog and resolves only on the machine that wrote the entry.
+        """
+        log = self._log()
+        superseded = {e["target"] for e in log}
+        sha = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
+        offenders = []
+        for e in log:
+            fields = {"new_value": e["new_value"]}
+            if f"amendments[{e['sequence'] - 1}].reason" not in superseded:
+                fields["reason"] = e["reason"]
+            # A reason may name the very id it is correcting. Exempt only ids
+            # this entry's own old_value quotes -- not any id at all, which
+            # would let a fresh bad reference hide inside an explanation.
+            quoted = set(sha.findall(str(e["old_value"])))
+            for name, text in fields.items():
+                for cand in sha.findall(str(text)):
+                    if name == "reason" and cand in quoted:
+                        continue
+                    ok = subprocess.run(
+                        ["git", "merge-base", "--is-ancestor", cand, "HEAD"],
+                        capture_output=True,
+                    ).returncode == 0
+                    if not ok:
+                        offenders.append((e["sequence"], name, cand))
+        assert not offenders, (
+            "unresolvable commit ids in live amendment values: "
+            + "; ".join(f"seq {s} {f}={c}" for s, f, c in offenders)
+            + ". Reference the commit by subject line, which survives a rebase."
+        )
+
+    def test_the_guard_can_fail(self):
+        """Negative control: the check must reject a known-bad SHA.
+
+        Without this the test above is indistinguishable from one that found
+        no SHA-shaped tokens at all.
+        """
+        bogus = "80ae1d8"
+        reachable = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", bogus, "HEAD"],
+            capture_output=True,
+        ).returncode == 0
+        assert not reachable, (
+            "control SHA is reachable, so this control proves nothing; pick one "
+            "that is genuinely absent from HEAD's history"
+        )
+        sha = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
+        assert sha.findall(f"Commit {bogus} removed that assignment") == [bogus]
+
+        # The old_value exemption must not be a blanket hole: a reason naming a
+        # bad id its own old_value does NOT quote is still a finding.
+        entry = {"sequence": 9, "old_value": "no id here",
+                 "reason": f"see {bogus} for details", "new_value": "fine"}
+        quoted = set(sha.findall(entry["old_value"]))
+        leaked = [c for c in sha.findall(entry["reason"]) if c not in quoted]
+        assert leaked == [bogus], (
+            "the exemption swallowed an unquoted bad id; it must key on the "
+            "entry's own old_value, not on membership in any field"
+        )
