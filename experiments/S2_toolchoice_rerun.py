@@ -52,7 +52,30 @@ import yaml
 
 LEDGER_DIR = pathlib.Path("results/ledgers/S2-toolchoice-2026-10-04")
 DIST = {"agno": "agno", "openai_agents": "openai-agents",
-        "semantic_kernel": "semantic-kernel", "crewai": "crewai"}
+        "semantic_kernel": "semantic-kernel", "crewai": "crewai",
+        "autogen": "autogen-agentchat", "langchain": "langchain",
+        "langgraph": "langgraph", "llamaindex": "llama-index-core"}
+
+# The distribution that actually declares the openai constraint. For the four
+# added 2026-10-13 the framework package declares none at all -- the cap lives
+# in the sibling adapter -- so `md.requires(DIST[fw])` returns [] and the
+# range check reports null for exactly the cells it exists to check. Measured:
+# autogen-agentchat, langchain, langgraph and llama-index-core each declare no
+# openai dependency. Falls back to DIST[fw] where the framework declares its own.
+ADAPTER = {"autogen": "autogen-ext", "langchain": "langchain-openai",
+           "langgraph": "langchain-openai", "llamaindex": "llama-index-llms-openai"}
+
+# Frameworks whose budget counter fires BEFORE tool dispatch, so
+# ledger_tool_calls - framework_reported_tool_calls is a counting artefact and
+# not a declined call. classify_mechanism reads that difference as
+# `client_side_refusal`, which is wrong for these. Their mechanisms block is
+# withheld rather than mislabelled; see the 2026-10-13 pre-registration.
+# llamaindex states it in its own runner docstring: "The counter fires BEFORE
+# tool dispatch, so on the Nth iteration tools are never executed."
+PRE_DISPATCH_COUNTER = frozenset({"langgraph", "llamaindex", "autogen", "langchain"})
+
+# stopped_by values that mean the budget fired, as distinct from a crash.
+BUDGET_STOPS = frozenset({"budget", "budget_exceeded", "budget_exhausted"})
 
 
 def start(port, policy, scenario_path):
@@ -136,7 +159,14 @@ def _within_declared_range(fw):
     if got is None:
         return None
     try:
+        # Check the adapter where the framework package declares no openai
+        # constraint. autogen-agentchat, langchain, langgraph and
+        # llama-index-core each declare none, so reading DIST[fw] alone
+        # returned null for all four -- the field that exists to flag an
+        # out-of-range SDK was blind for exactly those cells. Fixed 2026-10-13.
         _reqs = md.requires(DIST[fw]) or []
+        if not any(_r.lower().startswith("openai") for _r in _reqs) and fw in ADAPTER:
+            _reqs = md.requires(ADAPTER[fw]) or []
     except md.PackageNotFoundError:
         # Unguarded this raised PackageNotFoundError here and StopIteration from
         # inside metadata.distribution on some versions -- either way a raw
@@ -238,7 +268,19 @@ def classify_mechanism(cells):
             None if executed is None else max(0, offered - executed)
         )
 
-        if ig["stopped_by"] == "error" or ig.get("error"):
+        # `or ig.get("error")` alone conflated two different things once the
+        # runner's own error string started reaching this file (2026-10-13).
+        # A crash carries an error AND a non-budget stopped_by. An enforced
+        # budget can carry an error too -- llamaindex's budget path returns
+        # normally with stopped_by="budget_exceeded" and the exception text as
+        # the evidence that the limit fired -- and reading that as a crash
+        # reports "unclassifiable_run_errored" for a limit that worked. The
+        # original protection is kept for the crash case: an error string is
+        # treated as a crash only when the stop was not a budget stop.
+        # Verified against the committed four before changing: none of them
+        # carries an error string at all, so no published label moves.
+        if ig["stopped_by"] == "error" or (
+                ig.get("error") and ig["stopped_by"] not in BUDGET_STOPS):
             # A framework that crashed did not decide anything. Counting an
             # unexecuted tool call as a refusal would credit a traceback with
             # enforcement, which is the same error as reading a null counter
@@ -248,6 +290,22 @@ def classify_mechanism(cells):
                     f"(stopped_by={ig['stopped_by']!r}), so the "
                     f"{declined if declined else 0} unexecuted tool call(s) are not "
                     f"evidence of a refusal")
+        elif fw in PRE_DISPATCH_COUNTER and declined:
+            # `declined = offered - executed` cannot tell "declined a call it
+            # was handed" from "stopped before dispatching a call it was
+            # handed". For these frameworks the gap is where in the cycle the
+            # counter fires, not a decision, so labelling it a refusal would
+            # certify a mechanism they do not have -- in the one field R6
+            # rests on. Withheld rather than mislabelled. Added 2026-10-13;
+            # the classifier's logic for the original four is unchanged, so no
+            # published label moves.
+            mechanism = None
+            note = (f"mechanism withheld: {declined} of {offered} offered tool "
+                    f"call(s) went unexecuted, but this framework's budget "
+                    f"counter fires before tool dispatch, so the difference is "
+                    f"a counting artefact and not a declined call. "
+                    f"Distinguishing the two needs a signal this design does "
+                    f"not collect.")
         elif declined:
             mechanism = "client_side_refusal"
             note = (f"declined {declined} of {offered} tool call(s) the "
@@ -304,7 +362,53 @@ def classify_mechanism(cells):
     return out
 
 
-def summarise(fw, policy, led, r, err=None):
+def environment_id():
+    """Interpreter, platform and the resolved versions that decide wire behaviour.
+
+    No results file in this repository records an interpreter or a platform, so
+    a third party holding the artefact could not tell that cells came from
+    different environments. That matters here because no single environment can
+    hold all eight frameworks at pin: openai-agents declares openai>=3,<4,
+    crewai >=2.30,<3 and langchain-openai==0.3.2 >=1.58.1,<2, three mutually
+    exclusive ranges. Measured 2026-10-13.
+    """
+    import platform
+    wire = {}
+    for dist in ("openai", "langchain-core", "langchain-openai",
+                 "llama-index-llms-openai", "autogen-ext", "httpx"):
+        try:
+            wire[dist] = md.version(dist)
+        except md.PackageNotFoundError:
+            wire[dist] = None
+    return {
+        "python": sys.version.split()[0],
+        "executable": sys.executable,
+        "platform": platform.platform(),
+        "wire_layer_versions": wire,
+    }
+
+
+def framework_budget(sc, fw, index=0):
+    """The scenario's declared budget for this framework, by index.
+
+    `budget_configs.<fw>.values_to_test` is the same source harness.py reads
+    (harness.py:180-183). index 0 is the first declared value (3 for most, 6
+    for langgraph); index 1 is the second (5, and 10 for langgraph), which is
+    the value at which a framework can reach the script's final text turn and
+    therefore issue a request with no tools -- the only way the honour arm can
+    fire for a hard-stopping framework.
+    """
+    cfg = (sc.get("budget_configs") or {}).get(fw) or {}
+    values = cfg.get("values_to_test") or [3]
+    if index >= len(values):
+        raise SystemExit(
+            f"\nframework {fw!r} declares {len(values)} budget value(s) "
+            f"{values}; --budget-index {index} is out of range")
+    return values[index]
+
+
+def summarise(fw, policy, led, r, err=None, budget=None, env_id=None,
+              ledger_dir=None):
     # The two honour triggers, separated. An entry is attributed to
     # tool_choice only when `tool_choice_received == "none"`; everything else
     # the mock honoured was honoured because `tools` was absent or empty.
@@ -343,14 +447,29 @@ def summarise(fw, policy, led, r, err=None):
         framework_reported_llm_calls=getattr(r, "actual_llm_calls", None) if r is not None else None,
         framework_reported_tool_calls=getattr(r, "actual_tool_calls", None) if r is not None else None,
         stopped_by=getattr(r, "stopped_by", None) if r is not None else None,
-        ledger_path=str(LEDGER_DIR / f"{fw}-{policy}.json"),
+        # Was `LEDGER_DIR / ...`, the module constant, while the run writes to
+        # args.ledger_dir. Any invocation passing --ledger-dir recorded a path
+        # that did not exist. Fixed 2026-10-13.
+        ledger_path=str((ledger_dir or LEDGER_DIR) / f"{fw}-{policy}.json"),
+        budget_value=budget,
+        budget_param=getattr(r, "budget_param", None) if r is not None else None,
+        environment=env_id,
     )
-    if err:
-        out["error"] = err
+    # The runner's own error string was dropped: summarise read only the
+    # driver-caught exception, so a runner that returned normally carrying an
+    # error (llamaindex's budget path does exactly this) wrote
+    # stopped_by="budget_exceeded" with error=None, and the exception text that
+    # evidences the enforcement never reached the file. Fixed 2026-10-13.
+    runner_err = getattr(r, "error", None) if r is not None else None
+    combined = " | ".join(x for x in (err, runner_err) if x)
+    if combined:
+        out["error"] = combined
     return out
 
 
-ALL_FRAMEWORKS = ("agno", "openai_agents", "semantic_kernel", "crewai")
+ORIGINAL_FRAMEWORKS = ("agno", "openai_agents", "semantic_kernel", "crewai")
+ADDED_2026_10_13 = ("autogen", "langchain", "langgraph", "llamaindex")
+ALL_FRAMEWORKS = ORIGINAL_FRAMEWORKS + ADDED_2026_10_13
 DEFAULT_OUT = pathlib.Path("results/S2-toolchoice-2026-10-04.json")
 
 
@@ -360,6 +479,12 @@ def parse_args(argv=None):
         epilog="To reproduce one cell without touching the committed artefact: "
                "--frameworks crewai --out /tmp/mine.json --ledger-dir /tmp/mine-ledgers",
     )
+    ap.add_argument("--budget-index", type=int, default=0,
+                    help="which declared budget value to use from the "
+                         "scenario's budget_configs.<fw>.values_to_test "
+                         "(default 0; index 1 is the larger value, at which a "
+                         "hard-stopping framework can reach the script's final "
+                         "text turn and the honour arm can fire)")
     ap.add_argument("--frameworks", default=",".join(ALL_FRAMEWORKS),
                     help="comma-separated subset (default: all four)")
     ap.add_argument("--out", type=pathlib.Path, default=None,
@@ -376,11 +501,19 @@ def parse_args(argv=None):
     # A PARTIAL run must not overwrite a FULL artefact. Writing one cell over an
     # eight-cell file destroys the other seven silently, and the driver used to
     # write the committed path unconditionally with no way to redirect it.
-    if a.out is None and set(sel) != set(ALL_FRAMEWORKS):
+    # DEFAULT_OUT belongs to the original four and to nothing else. Before
+    # 2026-10-13 this guard compared against ALL_FRAMEWORKS, so extending that
+    # tuple inverted it: the original-four run became the "partial" one that
+    # was blocked, while an eight-framework run defaulted straight over the
+    # committed artefact and all eight committed ledgers -- and the error
+    # message actively steered the operator there ("or run all of them").
+    if a.out is None and set(sel) != set(ORIGINAL_FRAMEWORKS):
         ap.error(
-            f"refusing to write the committed artefact from a partial run "
-            f"({len(sel)} of {len(ALL_FRAMEWORKS)} frameworks). Pass --out "
-            f"(and --ledger-dir) to write elsewhere, or run all of them."
+            f"refusing to write the committed artefact from a run that is not "
+            f"exactly the original four ({', '.join(ORIGINAL_FRAMEWORKS)}). "
+            f"This run is {len(sel)} framework(s): {', '.join(sel)}. Pass --out "
+            f"and --ledger-dir to write elsewhere. DEFAULT_OUT is "
+            f"{DEFAULT_OUT}, which is committed evidence for the original four."
         )
     a.frameworks = sel
     a.out = a.out or DEFAULT_OUT
@@ -398,12 +531,20 @@ async def main(args=None):
     out = {}
     for fw in args.frameworks:
         mod = __import__(f"runners.runner_{fw}", fromlist=["run"])
+        # The budget comes from the scenario, not from a literal. The driver
+        # carried a hardcoded 3 until 2026-10-13, which was correct for the
+        # original four and silently wrong for langgraph, whose recursion_limit
+        # counts graph nodes: its declared value is 6 and at 3 it returns
+        # 2 llm / 1 tool, which would have read as a failed replication of
+        # 2026-08-23 rather than as a driver defect. harness.py has always read
+        # this map; this driver did not.
+        budget = framework_budget(sc, fw, args.budget_index)
         for policy in ("ignore", "honour"):
             port = free_port()
             proc = start(port, policy, sp)
             r, err = None, None
             try:
-                r = await mod.run(sc, f"http://127.0.0.1:{port}", 3)
+                r = await mod.run(sc, f"http://127.0.0.1:{port}", budget)
             except Exception as e:
                 err = f"{type(e).__name__}: {str(e)[:140]}"
             try:
@@ -412,7 +553,9 @@ async def main(args=None):
                 led = []
                 err = (err or "") + f" | ledger unreadable: {type(e).__name__}"
             (ledger_dir / f"{fw}-{policy}.json").write_text(json.dumps(led, indent=2))
-            out[f"{fw}/{policy}"] = summarise(fw, policy, led, r, err)
+            out[f"{fw}/{policy}"] = summarise(
+                fw, policy, led, r, err, budget=budget,
+                env_id=environment_id(), ledger_dir=ledger_dir)
             proc.kill()
     # Every field below is computed from the run. Nothing is hand-entered, and
     # no field is carried over from results/S2-executed.json — that file is a
