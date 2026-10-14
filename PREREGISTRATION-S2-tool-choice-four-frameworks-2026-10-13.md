@@ -1,3 +1,32 @@
+> **SUPERSEDED, same day, before it was ever pushed. Read
+> `MEASUREMENT-S2-tool-choice-four-frameworks-2026-10-13.md` instead.**
+>
+> This file is retained because it is the record that predictions were fixed before anything ran,
+> which is the one thing about it that held. It must not be read as a description of what happened,
+> and six of its claims are wrong:
+>
+> 1. **§3's "the whitelist and the distribution map, and nothing else" is false.** The driver
+>    hardcoded the budget at the call site and never read `budget_configs`, so langgraph at 6 was
+>    unreachable — this file predicted a value its own tooling could not express. Four more change
+>    points were needed; they are enumerated in §4 of the measurement report.
+> 2. **§4 named no interpreter, and there are two.** The repo's `.venv/` holds autogen and langchain
+>    at pin, so "two of the four cannot be run at pin in the working environment" is true of the
+>    Homebrew interpreter and false of the other. The real constraint is stronger: no single
+>    environment can hold all eight at pin.
+> 3. **§5's columns do not exist in the artefact.** It predicted `actual_llm_calls` /
+>    `actual_tool_calls`; the output carries `ledger_*` and `framework_reported_*`, which diverge.
+> 4. **§5's langgraph `stopped_by` silently normalised its own baseline.** The 2026-08-23 artefact
+>    records `"natural (graceful at limit)"`, a string no code path emits — the defect ERRATA E5
+>    already tombstones for crewai — and this file predicted `"natural"` while claiming to reproduce it.
+> 5. **§5's "weak prediction" reasoning was wrong.** The pathway it called unobserved is recorded on
+>    every ledger entry under both policies, so it is measured in the run's own first arm.
+> 6. **§7 was written in the completed tense for an act never performed.** Nothing was pushed, and
+>    the branch had diverged from `origin/main`, so the server-side timestamp it claimed as its
+>    attestation did not exist.
+>
+> Found by auditing the apparatus against the plan rather than by running it. A pre-registration that
+> names values its own tooling cannot express is not a commitment; it is a guess with a timestamp.
+
 # Pre-registration — S2 two-arm run extended to autogen, langchain, langgraph, llamaindex
 
 **Written and committed before the run.** Everything below is a prediction. Anything that disagrees
