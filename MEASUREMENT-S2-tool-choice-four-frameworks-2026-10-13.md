@@ -35,9 +35,18 @@ zeros do not:
 | framework | budget 3 / 6 | budget 5 / 10 | `tool_choice: none` | toolless requests |
 |---|---|---|---|---|
 | autogen | 2 llm / 2 tool | 4 / 4 | 0 at both | 0 at both |
-| langchain | 3 / 3 | 5 / 5 | 0 at both | 0 at both |
+| langchain **(at pin)** | 3 / 3 | 5 / 5 | 0 at both | 0 at both |
 | langgraph | 3 / 3 | 5 / 5 | 0 at both | 0 at both |
 | llamaindex | 3 / 3 | no second value declared | 0 | 0 |
+
+**Provenance of this table, because two of its columns are not committed.** The budget 3 / 6 column
+is the committed artefact, `results/S2-toolchoice-four-frameworks-2026-10-13.json`, whose eight
+cells are all at the first declared budget. **The budget 5 / 10 column is not committed anywhere**,
+and neither are the langchain rows: both were run to scratch paths and are reported here on the same
+terms as the pinned-environment cells in §2. langchain's figures in this table are from the isolated
+pinned environment in both columns, because in the main environment every langchain cell is
+`0 / 0 / error` — see §2. Anyone checking the committed JSON against this table will find four cells,
+not the twelve readings the table describes, and that is why this paragraph is here.
 
 Reaching the text turn needs a budget above nine, at which point the budget is no longer the thing
 under test. **So the counterparty arm and a hard stop shorter than the script are in tension**: the
@@ -65,7 +74,7 @@ Isolated environment at pinned versions (`openai 1.109.1`, `langchain 0.3.14`, `
 | cell | budget | ledger llm/tool | framework llm/tool | `stopped_by` | mechanism |
 |---|---|---|---|---|---|
 | autogen/ignore · honour | 3 | 2 / 2 | 2 / 2 | `budget` | `local_stop` |
-| langchain/ignore · honour | 3 | 3 / 3 | 3 / 3 | `budget` | `local_stop` |
+| langchain/ignore · honour **(at pin only)** | 3 | 3 / 3 | 3 / 3 | `budget` | `local_stop` |
 
 **langchain is void in the main environment and valid only at pin.** `langchain 1.3.16` removed
 `AgentExecutor` from `langchain.agents`, so the runner's import fails and the cell records
@@ -102,6 +111,9 @@ published labels are byte-identical (`cooperative_request`, `unclassifiable_run_
 
 Found by auditing the apparatus against the plan. Each would have written a plausible-looking wrong
 number rather than failing.
+
+Seven rows below against "five driver defects" in the commit title: the last two are missing
+metadata and a `.gitignore` line rather than defects that would have corrupted a cell.
 
 | # | Defect | What it would have produced |
 |---|---|---|
