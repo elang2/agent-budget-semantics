@@ -121,7 +121,7 @@ metadata and a `.gitignore` line rather than defects that would have corrupted a
 | 2 | `DEFAULT_OUT` guard compared against `ALL_FRAMEWORKS` | extending that tuple inverted it: an eight-framework run would default straight over the committed four-cell artefact and its eight ledgers |
 | 3 | `ledger_path` built from the module constant, not `args.ledger_dir` | every new cell pointing at a file that is not there |
 | 4 | The runner's own `error` was dropped; only the driver-caught exception was kept | llamaindex's `WorkflowRuntimeError: Max iterations of 3 reached!` — the evidence the limit fired — recorded as `error: null` |
-| 5 | `_within_declared_range` read `md.requires(DIST[fw])`, and all four frameworks declare no openai dependency | `null` for all eight new cells, in the field that exists to flag an out-of-range SDK. It now reports `False` for llamaindex, which is a real violation: `openai 3.8.0` against `llama-index-llms-openai`'s `<3` |
+| 5 | `_within_declared_range` read `md.requires(DIST[fw])`, and all four frameworks declare no openai dependency | `null` for all eight new cells, in the field that exists to flag an out-of-range SDK. After the fallthrough to the sibling adapter, **six of the eight carry a value and two do not**: it reports `False` for llamaindex, which is a real violation (`openai 3.8.0` against `llama-index-llms-openai`'s `<3`), and `True` for langchain and langgraph, but autogen's two cells are **still `null`**, because `autogen-ext` declares `openai` only under its `openai` extra and the function deliberately skips a markered requirement. The field is therefore repaired for three of the four frameworks, not all four. Measured in the committed JSON; an earlier wording here implied the fix cleared every null |
 | 6 | No interpreter, platform or wire-layer version in any artefact, baseline included | a reader could not tell that cells came from different environments |
 | 7 | `.gitignore:14` `results/*.json` | the declared output file silently untracked |
 
@@ -135,8 +135,15 @@ published label could move.
 One test was rewritten rather than satisfied. `test_a_partial_run_cannot_overwrite_the_committed_artefact`
 asserted `parse_args(ALL_FRAMEWORKS).out == DEFAULT_OUT`, commented "a full run still writes the
 artefact". True while `ALL_FRAMEWORKS` was the four that artefact holds; with eight it demanded
-exactly the overwrite the test is named after. It now asserts the invariant — that set and only that
-set may default there — and that a superset is refused. Suite: 314 passed.
+exactly the overwrite the test is named after. It now asserts the invariant, that set and only that
+set may default there, and that a superset is refused.
+
+**Suite: 314 passed over 314 of the 321 collected tests.** The 7 not run are
+`tests/test_mock_llm.py`, which hardcodes port 9222 and errors on this machine because
+Chrome's remote-debugging port is listening there. That is pre-existing and unrelated to
+this work, but it is a subset and the figure should not be read as the whole suite. An
+independent run on Linux aarch64 at this branch's head reported 320 passed and 1 skipped
+over the full 321, the skip being openai-agents absent, which reconciles exactly.
 
 ## 5. Environment, measured and named
 
