@@ -20,6 +20,8 @@ results/*.json
 !results/S4-executed.json
 !results/S5-executed.json
 !results/S2-toolchoice-2026-10-04.json
+!results/S2-toolchoice-four-frameworks-2026-10-13.json
+!results/second-budget-2026-10-14/**
 # The replication pair. "Two runs, zero differences" is only checkable if both
 # runs are present, so they are evidence and are tracked by name.
 !results/replication/run-a.json

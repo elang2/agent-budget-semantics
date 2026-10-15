@@ -1,0 +1,275 @@
+{
+  "scenario": "S2-budget-exhaustion",
+  "executed_at": "2026-10-15T00:18:47+00:00",
+  "preregistration": "PREREGISTRATION-S2-tool-choice-2026-10-04.md",
+  "driver": "experiments/S2_toolchoice_rerun.py",
+  "mock_server": "mock-llm/server.py with scenarios/S2-budget-exhaustion.yaml (10 turns: 9 tool + 1 text), run once per cell",
+  "budget_limit": 3,
+  "provenance": "executed; every numeric field in `cells` is read from a persisted ledger or from the runner result object",
+  "schema": {
+    "ledger_llm_calls": "len(ledger). Observed: one entry per request the mock served. Ground truth.",
+    "ledger_tool_calls": "sum of tool_calls_requested across ledger entries. Observed. Ground truth.",
+    "framework_reported_llm_calls": "result.actual_llm_calls, the count the framework itself reports. Counted, not observed.",
+    "framework_reported_tool_calls": "result.actual_tool_calls. Counted, not observed. May disagree with ledger_tool_calls; that disagreement is the finding, not an error.",
+    "stopped_by": "the framework's own description of why it stopped. Counted.",
+    "requests_sending_tool_choice_none": "ledger entries whose tool_choice_received == 'none'. Observed.",
+    "requests_with_tools_absent_or_empty": "ledger entries with no tools array. Observed.",
+    "honoured_via_tool_choice_none": "entries the mock honoured BECAUSE tool_choice was 'none'. Observed.",
+    "honoured_via_tools_absent": "entries the mock honoured because `tools` was absent or empty. Observed. This is a SECOND and independent trigger in server.py; an aggregate `honoured` count conflates the two, and a cell whose honour count comes only from this trigger carries no evidence about tool_choice at all.",
+    "ledger_path": "the persisted ledger this row was computed from.",
+    "no_modelled_fields": "This file deliberately carries no counter_at_budget_stop, unit_observed or mock_confirmed_calls. No runner reads a framework's internal counter, so a field named for one would be the author's model rather than a reading."
+  },
+  "mechanism_schema": {
+    "purpose": "R6 states that a declared budget is not an enforced budget. These rows say what each framework's limit actually rests on, derived from its own ledgers by classify_mechanism() rather than assigned by hand. There is no `enforced` boolean here: results/S2-executed.json has one and no code produces it.",
+    "local_stop": "Stopped without signalling the provider. The limit does not depend on the counterparty at all.",
+    "client_side_refusal": "Was handed a tool call by the non-compliant provider and did not execute it. The limit holds against a counterparty that ignores it.",
+    "cooperative_request": "Asked the provider to stop via tool_choice=none and executed what came back. The limit holds only if the counterparty cooperates.",
+    "why_two_policies": "Only the non-compliant provider can distinguish a refusal from a request, because a conformant one satisfies both."
+  },
+  "field_provenance": {
+    "vocabulary": [
+      "ledger",
+      "harness_counter",
+      "framework_api",
+      "declared",
+      "modelled",
+      "hand_authored"
+    ],
+    "fields": {
+      "ledger_llm_calls": "ledger",
+      "ledger_tool_calls": "ledger",
+      "requests_sending_tool_choice_none": "ledger",
+      "requests_sending_any_tool_choice": "ledger",
+      "requests_with_tools_absent_or_empty": "ledger",
+      "honoured_total": "ledger",
+      "honoured_via_tool_choice_none": "ledger",
+      "honoured_via_tools_absent": "ledger",
+      "framework_reported_tool_calls": "harness_counter",
+      "framework_reported_llm_calls": "per_runner",
+      "stopped_by": "framework_api",
+      "framework_version": "declared",
+      "openai_sdk_version": "declared",
+      "budget_limit": "declared"
+    },
+    "framework_reported_llm_calls_by_framework": {
+      "agno": "ledger",
+      "autogen": "framework_api",
+      "crewai": "ledger",
+      "langchain": "framework_api",
+      "langgraph": "framework_api",
+      "llamaindex": "ledger",
+      "openai_agents": "framework_api",
+      "semantic_kernel": "ledger"
+    },
+    "note": "No field in this file is `hand_authored` or `modelled`. `framework_api` applies only to `stopped_by`. Two field names are misnomers and are kept because they are cited: `framework_reported_tool_calls` is a harness counter, and `framework_reported_llm_calls` is ledger-derived or declared depending on the runner, never a framework counter."
+  },
+  "mechanisms": {
+    "autogen": {
+      "mechanism": "local_stop",
+      "classified_on": {
+        "withdraws_tools": false,
+        "signals_tool_choice_none": false,
+        "tool_calls_offered": 4,
+        "tool_calls_executed": 4,
+        "tool_calls_declined": 0,
+        "stopped_by": "budget",
+        "input_provenance": {
+          "withdraws_tools": "ledger",
+          "signals_tool_choice_none": "ledger",
+          "tool_calls_offered": "ledger",
+          "tool_calls_executed": "harness_counter",
+          "tool_calls_declined": "modelled (offered minus executed)",
+          "stopped_by": "framework_api"
+        }
+      },
+      "counterparty_dependent": false,
+      "note": "stopped without signalling the provider at all; sent no tool_choice and never withdrew tools",
+      "withdraws_tools": false,
+      "signals_tool_choice_none": false,
+      "tool_calls_offered_under_noncompliant_provider": 4,
+      "tool_calls_executed_under_noncompliant_provider": 4,
+      "tool_calls_declined": 0,
+      "stopped_by_under_noncompliant_provider": "budget",
+      "ledger_calls_ignore_vs_honour": [
+        4,
+        4
+      ]
+    },
+    "langgraph": {
+      "mechanism": null,
+      "classified_on": {
+        "withdraws_tools": false,
+        "signals_tool_choice_none": false,
+        "tool_calls_offered": 5,
+        "tool_calls_executed": 4,
+        "tool_calls_declined": 1,
+        "stopped_by": "natural",
+        "input_provenance": {
+          "withdraws_tools": "ledger",
+          "signals_tool_choice_none": "ledger",
+          "tool_calls_offered": "ledger",
+          "tool_calls_executed": "harness_counter",
+          "tool_calls_declined": "modelled (offered minus executed)",
+          "stopped_by": "framework_api"
+        }
+      },
+      "counterparty_dependent": false,
+      "note": "mechanism withheld: 1 of 5 offered tool call(s) went unexecuted, but this framework's budget counter fires before tool dispatch, so the difference is a counting artefact and not a declined call. Distinguishing the two needs a signal this design does not collect.",
+      "withdraws_tools": false,
+      "signals_tool_choice_none": false,
+      "tool_calls_offered_under_noncompliant_provider": 5,
+      "tool_calls_executed_under_noncompliant_provider": 4,
+      "tool_calls_declined": 1,
+      "stopped_by_under_noncompliant_provider": "natural",
+      "ledger_calls_ignore_vs_honour": [
+        5,
+        5
+      ]
+    }
+  },
+  "environment": {
+    "framework_telemetry_suppressed": {
+      "CREWAI_TELEMETRY_OPT_OUT": "true",
+      "OTEL_SDK_DISABLED": "true"
+    },
+    "note": "Set by the driver before any runner is imported. CrewAI exports spans to telemetry.crewai.com unless opted out, which adds a network dependency and a retry delay to a run whose ground truth is the mock's request ledger. Cells recorded before 2026-10-08 were produced WITHOUT these set, with the export failing; an independent replication reproduced them under that condition, so the values do not depend on it."
+  },
+  "cells": {
+    "autogen/ignore": {
+      "framework": "autogen",
+      "framework_version": "0.7.5",
+      "openai_sdk_version": "3.8.0",
+      "openai_sdk_within_framework_declared_range": null,
+      "mock_tool_choice_policy": "ignore",
+      "ledger_llm_calls": 4,
+      "ledger_tool_calls": 4,
+      "requests_sending_tool_choice_none": 0,
+      "requests_sending_any_tool_choice": 4,
+      "requests_with_tools_absent_or_empty": 0,
+      "honoured_total": 0,
+      "honoured_via_tool_choice_none": 0,
+      "honoured_via_tools_absent": 0,
+      "framework_reported_llm_calls": 4,
+      "framework_reported_tool_calls": 4,
+      "stopped_by": "budget",
+      "ledger_path": "results/second-budget-2026-10-14/ledgers/autogen-langgraph-budget1/autogen-ignore.json",
+      "budget_value": 5,
+      "budget_param": "max_messages",
+      "environment": {
+        "python": "3.13.7",
+        "executable": "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "platform": "macOS-15.3.2-arm64-arm-64bit-Mach-O",
+        "wire_layer_versions": {
+          "openai": "3.8.0",
+          "langchain-core": "1.6.0",
+          "langchain-openai": "1.6.0",
+          "llama-index-llms-openai": "0.7.10",
+          "autogen-ext": "0.7.5",
+          "httpx": "0.28.1"
+        }
+      }
+    },
+    "autogen/honour": {
+      "framework": "autogen",
+      "framework_version": "0.7.5",
+      "openai_sdk_version": "3.8.0",
+      "openai_sdk_within_framework_declared_range": null,
+      "mock_tool_choice_policy": "honour",
+      "ledger_llm_calls": 4,
+      "ledger_tool_calls": 4,
+      "requests_sending_tool_choice_none": 0,
+      "requests_sending_any_tool_choice": 4,
+      "requests_with_tools_absent_or_empty": 0,
+      "honoured_total": 0,
+      "honoured_via_tool_choice_none": 0,
+      "honoured_via_tools_absent": 0,
+      "framework_reported_llm_calls": 4,
+      "framework_reported_tool_calls": 4,
+      "stopped_by": "budget",
+      "ledger_path": "results/second-budget-2026-10-14/ledgers/autogen-langgraph-budget1/autogen-honour.json",
+      "budget_value": 5,
+      "budget_param": "max_messages",
+      "environment": {
+        "python": "3.13.7",
+        "executable": "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "platform": "macOS-15.3.2-arm64-arm-64bit-Mach-O",
+        "wire_layer_versions": {
+          "openai": "3.8.0",
+          "langchain-core": "1.6.0",
+          "langchain-openai": "1.6.0",
+          "llama-index-llms-openai": "0.7.10",
+          "autogen-ext": "0.7.5",
+          "httpx": "0.28.1"
+        }
+      }
+    },
+    "langgraph/ignore": {
+      "framework": "langgraph",
+      "framework_version": "1.2.11",
+      "openai_sdk_version": "3.8.0",
+      "openai_sdk_within_framework_declared_range": true,
+      "mock_tool_choice_policy": "ignore",
+      "ledger_llm_calls": 5,
+      "ledger_tool_calls": 5,
+      "requests_sending_tool_choice_none": 0,
+      "requests_sending_any_tool_choice": 0,
+      "requests_with_tools_absent_or_empty": 0,
+      "honoured_total": 0,
+      "honoured_via_tool_choice_none": 0,
+      "honoured_via_tools_absent": 0,
+      "framework_reported_llm_calls": 5,
+      "framework_reported_tool_calls": 4,
+      "stopped_by": "natural",
+      "ledger_path": "results/second-budget-2026-10-14/ledgers/autogen-langgraph-budget1/langgraph-ignore.json",
+      "budget_value": 10,
+      "budget_param": "recursion_limit",
+      "environment": {
+        "python": "3.13.7",
+        "executable": "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "platform": "macOS-15.3.2-arm64-arm-64bit-Mach-O",
+        "wire_layer_versions": {
+          "openai": "3.8.0",
+          "langchain-core": "1.6.0",
+          "langchain-openai": "1.6.0",
+          "llama-index-llms-openai": "0.7.10",
+          "autogen-ext": "0.7.5",
+          "httpx": "0.28.1"
+        }
+      }
+    },
+    "langgraph/honour": {
+      "framework": "langgraph",
+      "framework_version": "1.2.11",
+      "openai_sdk_version": "3.8.0",
+      "openai_sdk_within_framework_declared_range": true,
+      "mock_tool_choice_policy": "honour",
+      "ledger_llm_calls": 5,
+      "ledger_tool_calls": 5,
+      "requests_sending_tool_choice_none": 0,
+      "requests_sending_any_tool_choice": 0,
+      "requests_with_tools_absent_or_empty": 0,
+      "honoured_total": 0,
+      "honoured_via_tool_choice_none": 0,
+      "honoured_via_tools_absent": 0,
+      "framework_reported_llm_calls": 5,
+      "framework_reported_tool_calls": 4,
+      "stopped_by": "natural",
+      "ledger_path": "results/second-budget-2026-10-14/ledgers/autogen-langgraph-budget1/langgraph-honour.json",
+      "budget_value": 10,
+      "budget_param": "recursion_limit",
+      "environment": {
+        "python": "3.13.7",
+        "executable": "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "platform": "macOS-15.3.2-arm64-arm-64bit-Mach-O",
+        "wire_layer_versions": {
+          "openai": "3.8.0",
+          "langchain-core": "1.6.0",
+          "langchain-openai": "1.6.0",
+          "llama-index-llms-openai": "0.7.10",
+          "autogen-ext": "0.7.5",
+          "httpx": "0.28.1"
+        }
+      }
+    }
+  }
+}

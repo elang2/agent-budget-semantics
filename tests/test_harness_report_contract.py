@@ -510,14 +510,38 @@ class TestDriverSurfaceAndTelemetry:
                     os.environ[k] = v
 
     def test_a_partial_run_cannot_overwrite_the_committed_artefact(self):
-        """One cell written over an eight-cell file destroys seven silently."""
+        """One cell written over an eight-cell file destroys seven silently.
+
+        Rewritten 2026-10-13. The last assertion used to read
+        `parse_args(ALL_FRAMEWORKS).out == DEFAULT_OUT` with the comment "a
+        full run still writes the artefact". That was true and safe while
+        ALL_FRAMEWORKS was the four frameworks DEFAULT_OUT holds. When
+        ALL_FRAMEWORKS grew to eight it inverted: the assertion then demanded
+        that an eight-framework run default straight over a four-cell
+        committed artefact and its eight committed ledgers, which is the
+        destruction this test is named after. The test was asserting the
+        defect. The invariant it was reaching for is about the artefact's
+        contents, not about the word "full", so it is now stated that way.
+        """
         m = self._driver()
         with pytest.raises(SystemExit):
             m.parse_args(["--frameworks", "crewai"])
         a = m.parse_args(["--frameworks", "crewai", "--out", "/tmp/x.json"])
         assert a.frameworks == ["crewai"] and str(a.out) == "/tmp/x.json"
-        full = m.parse_args(["--frameworks", ",".join(m.ALL_FRAMEWORKS)])
-        assert full.out == m.DEFAULT_OUT, "a full run still writes the artefact"
+
+        # DEFAULT_OUT is the artefact for exactly the original four, so that
+        # set and only that set may default to it.
+        orig = m.parse_args(["--frameworks", ",".join(m.ORIGINAL_FRAMEWORKS)])
+        assert orig.out == m.DEFAULT_OUT, (
+            "the original four still write their own artefact")
+
+        # Anything else must be made to say where it is going, including a
+        # superset. A superset is the dangerous case: it looks like "more
+        # data" and silently drops the cells it does not run.
+        for argv in (["--frameworks", ",".join(m.ALL_FRAMEWORKS)],
+                     ["--frameworks", ",".join(m.ADDED_2026_10_13)]):
+            with pytest.raises(SystemExit):
+                m.parse_args(argv)
 
     def test_an_unknown_framework_is_rejected_by_name(self):
         m = self._driver()
