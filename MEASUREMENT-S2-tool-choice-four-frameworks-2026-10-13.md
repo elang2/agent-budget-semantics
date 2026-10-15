@@ -39,14 +39,22 @@ zeros do not:
 | langgraph | 3 / 3 | 5 / 5 | 0 at both | 0 at both |
 | llamaindex | 3 / 3 | no second value declared | 0 | 0 |
 
-**Provenance of this table, because two of its columns are not committed.** The budget 3 / 6 column
-is the committed artefact, `results/S2-toolchoice-four-frameworks-2026-10-13.json`, whose eight
-cells are all at the first declared budget. **The budget 5 / 10 column is not committed anywhere**,
-and neither are the langchain rows: both were run to scratch paths and are reported here on the same
-terms as the pinned-environment cells in §2. langchain's figures in this table are from the isolated
-pinned environment in both columns, because in the main environment every langchain cell is
-`0 / 0 / error` — see §2. Anyone checking the committed JSON against this table will find four cells,
-not the twelve readings the table describes, and that is why this paragraph is here.
+**Provenance of this table. Every reading in it is now committed; it was not when this file was
+first written.** The budget 3 / 6 column is `results/S2-toolchoice-four-frameworks-2026-10-13.json`,
+whose eight cells are all at the first declared budget. The budget 5 / 10 column and both langchain
+rows are `results/second-budget-2026-10-14/`, three driver outputs copied verbatim and verified
+byte-identical to what the driver wrote. langchain's figures are from a pinned environment in both
+columns, because in the main environment every langchain cell is `0 / 0 / error` — see §2.
+
+**Tombstone, corrected 2026-10-14.** This paragraph previously read "two of its columns are not
+committed… the budget 5 / 10 column is not committed anywhere… both were run to scratch paths".
+That was accurate when written and became a liability immediately: the scratch outputs did not
+survive, so a search of the authoring machine found **no** artefact carrying a `budget_value` of 5
+or 10 for any framework, and the three figures in the paragraph above it were a recollection rather
+than a reading. They were re-run and committed instead of being reworded, and they reproduced
+exactly, including langchain at pin. This is the failure mode the project tombstones repeatedly —
+prose outliving the artefact it describes — reached here by writing down a number whose evidence was
+in `/tmp`. **Write a cell to a committed path or do not cite it.**
 
 Reaching the text turn needs a budget above nine, at which point the budget is no longer the thing
 under test. **So the counterparty arm and a hard stop shorter than the script are in tension**: the
@@ -142,8 +150,11 @@ set may default there, and that a superset is refused.
 `tests/test_mock_llm.py`, which hardcodes port 9222 and errors on this machine because
 Chrome's remote-debugging port is listening there. That is pre-existing and unrelated to
 this work, but it is a subset and the figure should not be read as the whole suite. An
-independent run on Linux aarch64 at this branch's head reported 320 passed and 1 skipped
-over the full 321, the skip being openai-agents absent, which reconciles exactly.
+independent run on Linux aarch64 reported 320 passed, 1 skipped and **0 failed** over the
+full 321, the skip being openai-agents absent, which reconciles exactly. It reported the
+same at both `17c11c608` and `3077a86`, so the 7 do not reproduce on a machine without the
+port collision, which is the evidence that the cause is the environment and not the suite.
+If you see 7 errors in `tests/test_mock_llm.py`, check what already holds port 9222.
 
 ## 5. Environment, measured and named
 
@@ -153,8 +164,21 @@ not name the interpreter. There are two, and the claim is true of one:
 - **Homebrew CPython 3.13.7** — langgraph 1.2.11 and llama-index-core 0.14.24 at pin;
   autogen-agentchat 0.7.5 and langchain 1.3.16 drifted, the latter a major version.
 - **the repo's `.venv/`** — autogen-agentchat 0.4.7, autogen-ext 0.4.7, langchain 0.3.14,
-  langchain-openai 0.3.2, all at pin, but no llama-index-core and no openai-agents, and agno 3.0.5
-  rather than 1.2.5.
+  langchain-openai 0.3.2, but no llama-index-core and no openai-agents, and agno 3.0.5
+  rather than 1.2.5. **Corrected 2026-10-14: "all at pin" was true of the versions listed and
+  false about what it implied, because langchain cannot run there.** That venv also holds
+  `langchain-core 1.6.0`, while `langchain 0.3.14` declares `langchain-core>=0.3.29,<0.4.0`, so the
+  constraint is unsatisfied and the import fails on `No module named 'langchain_core.memory'` —
+  a different symptom from the main environment's missing `AgentExecutor`, the same cause. Measured:
+  run in that venv as-is, langchain returns `0 / 0` with `stopped_by: error` at both budgets. The
+  committed pinned cells therefore come from a venv built for them
+  (`langchain-core 0.3.63`, `openai 1.109.1`); see `results/second-budget-2026-10-14/README.md`.
+  Listing a package version is not evidence its dependency closure resolves. **The repository's
+  own recipe is not at fault, which was measured rather than assumed**: `PINS.md` line 32,
+  `pip install langchain==0.3.14 langchain-openai==0.3.2`, resolves `langchain-core 0.3.63` and
+  `openai 1.109.1` in an empty venv and the runner imports. The constraint is only violated when
+  those two go in alongside something that pulls a 1.x core, which `langgraph 1.2.11` and
+  `langchain-openai 1.x` both do, and which is how this `.venv` reached 1.6.0.
 
 **No single environment can hold all eight frameworks at pin.** `openai-agents` declares
 `openai>=3,<4`, `crewai` `>=2.30,<3`, and `langchain-openai 0.3.2` `>=1.58.1,<2` — three mutually
